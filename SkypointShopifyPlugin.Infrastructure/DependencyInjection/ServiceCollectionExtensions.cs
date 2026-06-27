@@ -14,8 +14,18 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
             {
                 configuration.GetSection(SkypointApiSettings.SectionName).Bind(options);
             });
+
+            services.Configure<ShopifySettings>(options =>
+            {
+                configuration.GetSection(ShopifySettings.SectionName).Bind(options);
+            });
             
             services.AddHttpClient<ISkypointApiClient, SkypointApiClient>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+
+            services.AddHttpClient<IShopifyOAuthService, ShopifyOAuthService>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
             });

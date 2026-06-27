@@ -5,8 +5,8 @@ D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\SkypointShopifyPlugin.Core.AssemblyInfoInputs.cache
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\SkypointShopifyPlugin.Core.AssemblyInfo.cs
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\SkypointShopifyPlugin.Core.csproj.CoreCompileInputs.cache
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\SkypointShopifyPlugin.Core.sourcelink.json
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\SkypointShopifyPlugin.Core.dll
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\refint\SkypointShopifyPlugin.Core.dll
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\SkypointShopifyPlugin.Core.pdb
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\ref\SkypointShopifyPlugin.Core.dll
-D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Core\obj\Debug\net9.0\SkypointShopifyPlugin.Core.sourcelink.json

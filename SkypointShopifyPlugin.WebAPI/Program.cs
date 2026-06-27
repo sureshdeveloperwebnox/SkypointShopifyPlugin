@@ -3,6 +3,9 @@ using SkypointShopifyPlugin.Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add environment variables configuration (overrides appsettings.json)
+builder.Configuration.AddEnvironmentVariables();
+
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
