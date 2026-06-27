@@ -60,3 +60,5 @@ D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\ne
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\SkypointShopifyPlugin.WebAPI.pdb
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\SkypointShopifyPlugin.WebAPI.genruntimeconfig.cache
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\ref\SkypointShopifyPlugin.WebAPI.dll
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\DotNetEnv.dll
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\Sprache.dll
