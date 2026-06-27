@@ -1,0 +1,62 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkypointShopifyPlugin.Core", "SkypointShopifyPlugin.Core\SkypointShopifyPlugin.Core.csproj", "{02366DC5-137D-4526-A666-566D26C1FEA7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkypointShopifyPlugin.Application", "SkypointShopifyPlugin.Application\SkypointShopifyPlugin.Application.csproj", "{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkypointShopifyPlugin.WebAPI", "SkypointShopifyPlugin.WebAPI\SkypointShopifyPlugin.WebAPI.csproj", "{68A9014A-1A19-466B-8CCD-1F531B311C16}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Debug|x64.Build.0 = Debug|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Debug|x86.Build.0 = Debug|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Release|x64.ActiveCfg = Release|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Release|x64.Build.0 = Release|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Release|x86.ActiveCfg = Release|Any CPU
+		{02366DC5-137D-4526-A666-566D26C1FEA7}.Release|x86.Build.0 = Release|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Debug|x64.Build.0 = Debug|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Debug|x86.Build.0 = Debug|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Release|Any CPU.Build.0 = Release|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Release|x64.ActiveCfg = Release|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Release|x64.Build.0 = Release|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Release|x86.ActiveCfg = Release|Any CPU
+		{83EF8728-1C7D-4F9D-86C8-35D8D2FD0550}.Release|x86.Build.0 = Release|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Debug|x64.Build.0 = Debug|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Debug|x86.Build.0 = Debug|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Release|x64.ActiveCfg = Release|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Release|x64.Build.0 = Release|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Release|x86.ActiveCfg = Release|Any CPU
+		{68A9014A-1A19-466B-8CCD-1F531B311C16}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
