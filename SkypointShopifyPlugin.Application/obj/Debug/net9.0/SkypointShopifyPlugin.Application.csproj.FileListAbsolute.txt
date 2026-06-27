@@ -13,3 +13,4 @@ D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Application\obj\Deb
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Application\obj\Debug\net9.0\refint\SkypointShopifyPlugin.Application.dll
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Application\obj\Debug\net9.0\SkypointShopifyPlugin.Application.pdb
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Application\obj\Debug\net9.0\ref\SkypointShopifyPlugin.Application.dll
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.Application\obj\Debug\net9.0\SkypointShopifyPlugin.Application.sourcelink.json
