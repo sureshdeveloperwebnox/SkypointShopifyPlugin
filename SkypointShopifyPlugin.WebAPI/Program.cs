@@ -1,5 +1,9 @@
+using DotNetEnv;
 using MediatR;
 using SkypointShopifyPlugin.Infrastructure.DependencyInjection;
+
+// Load .env file
+Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
