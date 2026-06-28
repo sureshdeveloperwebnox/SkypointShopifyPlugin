@@ -6,5 +6,8 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         string? GetToken(string shopDomain);
         bool HasToken(string shopDomain);
         void RemoveToken(string shopDomain);
+
+        /// <summary>Returns all shop domains that currently have a stored Shopify OAuth token.</summary>
+        IReadOnlyList<string> GetAllShops();
     }
 }

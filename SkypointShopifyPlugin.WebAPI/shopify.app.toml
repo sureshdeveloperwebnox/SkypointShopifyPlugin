@@ -1,0 +1,40 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "1a36080eae7761c68616ba67c2b7ac7e"
+name = "SkyPoint"
+application_url = "https://0879-49-204-233-0.ngrok-free.app/index.html"
+embedded = true
+handle = "skypoint-shipping"
+
+[webhooks]
+api_version = "2026-04"
+
+  [webhooks.privacy_compliance]
+  customer_deletion_url = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/customers/redact"
+  customer_data_request_url = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/customers/data_request"
+  shop_deletion_url = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/shop/redact"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/updated" ]
+  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/orders/updated"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/cancelled" ]
+  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/orders/cancelled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/app/uninstalled"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = ""
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ "https://0879-49-204-233-0.ngrok-free.app/api/shopify/auth" ]

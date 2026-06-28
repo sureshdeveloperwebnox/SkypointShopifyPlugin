@@ -4,45 +4,62 @@ using SkypointShopifyPlugin.Core.Interfaces;
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
     /// <summary>
-    /// Pure in-memory store. No file writes, no hardcoded values.
-    /// Credentials are stored when the merchant logs in via the app dashboard.
-    /// Tokens are cached and auto-refreshed using stored credentials.
+    /// In-memory token cache backed by a persistent credential store.
+    ///
+    /// Tokens live in memory only (fast, no disk I/O on every carrier rate call).
+    /// Credentials (username + encrypted password) are persisted to disk via
+    /// ISkypointCredentialStore whenever SaveCredentials is called.
+    ///
+    /// On server restart the bootstrap service re-authenticates every known shop
+    /// using the persisted credentials, so carrier rates work immediately without
+    /// any hardcoded values or manual re-login.
     /// </summary>
     public class SkypointTokenStore : ISkypointTokenStore
     {
         private record TokenEntry(string Token, DateTime Expiration);
-        private record CredentialEntry(string Username, string Password);
 
-        private readonly ConcurrentDictionary<string, TokenEntry> _tokens = new(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<string, CredentialEntry> _credentials = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, TokenEntry> _tokens =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        private readonly ISkypointCredentialStore _credentialStore;
+
+        public SkypointTokenStore(ISkypointCredentialStore credentialStore)
+            => _credentialStore = credentialStore;
+
+        // ── ISkypointTokenStore ──────────────────────────────────────────────────
 
         public void SaveCredentials(string shopDomain, string username, string password)
-            => _credentials[shopDomain] = new CredentialEntry(username, password);
+            => _credentialStore.Save(shopDomain, username, password);
 
         public void SaveToken(string shopDomain, string skypointToken, DateTime expiration)
-            => _tokens[shopDomain] = new TokenEntry(skypointToken, expiration);
+            => _tokens[Normalize(shopDomain)] = new TokenEntry(skypointToken, expiration);
 
         public string? GetToken(string shopDomain)
         {
-            if (_tokens.TryGetValue(shopDomain, out var entry) && entry.Expiration > DateTime.UtcNow)
+            var key = Normalize(shopDomain);
+            if (_tokens.TryGetValue(key, out var entry) && entry.Expiration > DateTime.UtcNow)
                 return entry.Token;
             return null;
         }
 
         public (string username, string password)? GetCredentials(string shopDomain)
         {
-            if (_credentials.TryGetValue(shopDomain, out var creds))
-                return (creds.Username, creds.Password);
-            return null;
+            var creds = _credentialStore.Get(shopDomain);
+            if (creds == null) return null;
+            return (creds.Value.Username, creds.Value.Password);
         }
 
         public bool IsTokenValid(string shopDomain)
-            => _tokens.TryGetValue(shopDomain, out var e) && e.Expiration > DateTime.UtcNow;
+            => _tokens.TryGetValue(Normalize(shopDomain), out var e) && e.Expiration > DateTime.UtcNow;
 
         public void Clear(string shopDomain)
         {
-            _tokens.TryRemove(shopDomain, out _);
-            _credentials.TryRemove(shopDomain, out _);
+            _tokens.TryRemove(Normalize(shopDomain), out _);
+            _credentialStore.Remove(shopDomain);
         }
+
+        private static string Normalize(string shop)
+            => shop.Trim().ToLowerInvariant()
+                   .Replace("https://", "").Replace("http://", "").TrimEnd('/');
     }
 }

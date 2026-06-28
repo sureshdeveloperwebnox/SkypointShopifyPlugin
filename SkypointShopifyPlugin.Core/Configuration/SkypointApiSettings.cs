@@ -63,9 +63,7 @@ namespace SkypointShopifyPlugin.Core.Configuration
         /// </summary>
         public string GetRateQuoteUrl() => $"{BaseUrl}{RateEndpoint}";
 
-        /// <summary>
-        /// Gets the full booking URL
-        /// </summary>
+        /// <summary>Gets the full booking URL</summary>
         public string GetBookingUrl() => $"{BaseUrl}{BookingEndpoint}";
     }
 }

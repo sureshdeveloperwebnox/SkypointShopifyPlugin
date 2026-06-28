@@ -32,6 +32,34 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         }
 
         /// <summary>
+        /// Builds the public-facing redirect URI for OAuth.
+        /// Uses Shopify__RedirectUri from config — must match the URL registered in Partner Dashboard.
+        /// </summary>
+        private string BuildRedirectUri()
+        {
+            var configured = _configuration["Shopify:RedirectUri"];
+            if (!string.IsNullOrEmpty(configured))
+                return configured;
+            return $"{Request.Scheme}://{Request.Host}/api/shopify/auth";
+        }
+
+        /// <summary>
+        /// Derives the public base URL (scheme + host, no path).
+        /// Strips /api/shopify/auth from RedirectUri to get the base.
+        /// Used to build the carrier callback URL that Shopify calls at checkout.
+        /// </summary>
+        private string BuildPublicBaseUrl()
+        {
+            var configured = _configuration["Shopify:RedirectUri"];
+            if (!string.IsNullOrEmpty(configured))
+            {
+                // e.g. https://xxxx.ngrok-free.app/api/shopify/auth → https://xxxx.ngrok-free.app
+                var uri = new Uri(configured);
+                return $"{uri.Scheme}://{uri.Host}";
+            }
+            return $"{Request.Scheme}://{Request.Host}";
+        }
+        /// <summary>
         /// Default endpoint - Shopify store requesting to install app, or app opened from admin
         /// </summary>
         [HttpGet]
@@ -40,11 +68,11 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             if (string.IsNullOrEmpty(shop))
                 return Redirect("/index.html");
 
+            shop = NormalizeShopDomain(shop);
             _logger.LogInformation("Install request from shop: {Shop}", shop);
             try
             {
-                // Build redirect URI dynamically - works with any ngrok URL, no config needed
-                var redirectUri = $"{Request.Scheme}://{Request.Host}/api/shopify/auth";
+                var redirectUri = BuildRedirectUri();
                 var installUrl = _oauthService.GetInstallUrl(shop, redirectUri);
                 return Redirect(installUrl);
             }
@@ -71,6 +99,11 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 
             try
             {
+                if (string.IsNullOrEmpty(shop))
+                    return BadRequest(new { error = "Shop domain is required" });
+
+                shop = NormalizeShopDomain(shop);
+
                 if (string.IsNullOrEmpty(code))
                 {
                     _logger.LogError("No authorization code provided");
@@ -82,14 +115,13 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 if (string.IsNullOrEmpty(accessToken))
                     return StatusCode(500, new { error = "Failed to obtain access token" });
 
-                _logger.LogInformation("Access token obtained for shop: {Shop}", shop);
-
-                // Persist token immediately - survives restarts
+                // Persist token immediately — in-memory cache
                 _shopTokenStore.SaveToken(shop, accessToken);
 
-                // Register carrier service in background - don't block the redirect
-                // even if it fails now, it will retry on next dashboard open
-                var carrierUrl = $"{Request.Scheme}://{Request.Host}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
+                // Register carrier service in background — don't block the redirect.
+                // Build carrier URL from the public ngrok/production base URL.
+                var publicBase = BuildPublicBaseUrl();
+                var carrierUrl = $"{publicBase}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
                 _ = Task.Run(async () =>
                 {
                     try
@@ -98,11 +130,11 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Background carrier registration failed for {Shop} - will retry on next login", shop);
+                        _logger.LogWarning(ex, "Background carrier registration failed for {Shop} — will retry on next dashboard open", shop);
                     }
                 });
 
-                // Redirect to app UI immediately
+                // Redirect to app UI
                 return Redirect($"/index.html?shop={Uri.EscapeDataString(shop)}");
             }
             catch (Exception ex)
@@ -123,7 +155,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             if (string.IsNullOrEmpty(shop))
                 return BadRequest(new { error = "shop parameter required" });
 
-            shop = shop.Replace("https://", "").Replace("http://", "").TrimEnd('/').ToLowerInvariant();
+            shop = NormalizeShopDomain(shop);
 
             // 1. Primary: use the OAuth token saved when this store installed the app
             var accessToken = _shopTokenStore.GetToken(shop);
@@ -142,12 +174,15 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             if (string.IsNullOrEmpty(accessToken))
             {
                 _logger.LogWarning("No token found for {Shop} — reinstall required", shop);
+                var installUrl = _oauthService.GetInstallUrl(shop, BuildRedirectUri());
                 return Ok(new
                 {
                     status = "reinstall_required",
                     success = false,
                     message = "This store needs to reinstall the Skypoint Shipping app to authorize it. " +
-                              "Ask the merchant to visit the install URL and complete the OAuth flow."
+                              "Click 'Reconnect Shopify' to complete the OAuth flow.",
+                    shop,
+                    install_url = installUrl
                 });
             }
 
@@ -156,26 +191,24 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         }
 
 
-        // ── shared helper ─────────────────────────────────────────────────────────
         private async Task<object> RegisterCarrierForShop(string shop, string accessToken)
         {
-            // Build the public callback URL from the incoming request.
-            // When accessed via ngrok, X-Forwarded-Proto = "https" is applied by UseForwardedHeaders
-            // so Request.Scheme is already "https" — the URL will be correct.
-            // Shopify REQUIRES HTTPS for carrier callback URLs, so refuse http:// here.
-            var carrierServiceUrl = $"{Request.Scheme}://{Request.Host}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
+            // Always use the public ngrok/production URL for the carrier callback.
+            // Shopify REQUIRES HTTPS. Using BuildPublicBaseUrl() ensures we never
+            // accidentally register http://localhost as the callback.
+            var publicBase = BuildPublicBaseUrl();
+            var carrierServiceUrl = $"{publicBase}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
 
             if (!carrierServiceUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning(
                     "Carrier registration skipped for {Shop} — callback URL is not HTTPS: {Url}. " +
-                    "Open /api/shopify/setup through the ngrok URL (e.g. https://xxxx.ngrok-free.app/api/shopify/setup?shop={Shop})",
-                    shop, carrierServiceUrl, shop);
+                    "Update Shopify__RedirectUri in .env with the current ngrok URL.",
+                    shop, carrierServiceUrl);
                 return new
                 {
                     success = false,
-                    message = "Carrier registration requires an HTTPS callback URL. " +
-                              "Please call this endpoint through the ngrok tunnel, not localhost.",
+                    message = "Carrier registration requires HTTPS. Update Shopify__RedirectUri in .env with your current ngrok URL, then try again.",
                     shop,
                     carrier_url = carrierServiceUrl
                 };
@@ -189,8 +222,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             if (!success && IsInvalidShopifyTokenMessage(message))
             {
                 _shopTokenStore.RemoveToken(shop);
-                var redirectUri = $"{Request.Scheme}://{Request.Host}/api/shopify/auth";
-                var installUrl = _oauthService.GetInstallUrl(shop, redirectUri);
+                var installUrl = _oauthService.GetInstallUrl(shop, BuildRedirectUri());
                 _logger.LogWarning("Removed invalid Shopify token for {Shop}; OAuth reconnect required", shop);
 
                 return new
@@ -216,6 +248,13 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             => message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase)
                || message.Contains("Invalid API key or access token", StringComparison.OrdinalIgnoreCase)
                || message.Contains("unrecognized login", StringComparison.OrdinalIgnoreCase);
+
+        private static string NormalizeShopDomain(string shop)
+            => shop.Replace("https://", "", StringComparison.OrdinalIgnoreCase)
+                   .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
+                   .Trim()
+                   .TrimEnd('/')
+                   .ToLowerInvariant();
 
         /// <summary>
         /// Webhook endpoint for orders/create
@@ -337,23 +376,30 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         }
 
         /// <summary>
-        /// Webhook endpoint for app/uninstalled
+        /// Webhook endpoint for app/uninstalled — removes the stored OAuth token for the shop.
         /// </summary>
         [HttpPost("app/uninstalled")]
         public async Task<IActionResult> AppUninstalled()
         {
             _logger.LogInformation("App uninstalled webhook received");
-            
+
             if (!VerifyWebhookSignature())
             {
                 _logger.LogWarning("Invalid webhook signature");
                 return Unauthorized();
             }
 
-            // TODO: Clean up shop data
+            // Remove the stored token so the next install triggers a clean OAuth flow
+            var shopHeader = Request.Headers["X-Shopify-Shop-Domain"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(shopHeader))
+            {
+                _shopTokenStore.RemoveToken(shopHeader);
+                _logger.LogInformation("Removed stored token for uninstalled shop: {Shop}", shopHeader);
+            }
+
             var body = await new StreamReader(Request.Body).ReadToEndAsync();
-            _logger.LogInformation("App uninstalled payload: {Body}", body);
-            
+            _logger.LogDebug("App uninstalled payload: {Body}", body);
+
             return Ok();
         }
 

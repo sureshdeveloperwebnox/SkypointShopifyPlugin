@@ -35,10 +35,26 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(30);
             });
 
-            // File-backed token store — persists OAuth tokens across server restarts.
-            // Tokens are written to data/shop_tokens.json on first install and loaded on startup.
-            services.AddSingleton<IShopTokenStore, FileBackedShopTokenStore>();
+            // Shopify OAuth token store — in-memory cache + AES-encrypted file persistence.
+            // Token is written on OAuth callback and reloaded on every server restart.
+            // Nothing is ever sent to the browser.
+            services.AddSingleton<IShopTokenStore, ShopTokenStore>();
+
+            // Skypoint credential store — persists encrypted credentials to disk.
+            // DataDirectory shares the same directory as the Shopify token store.
+            services.AddSingleton<ISkypointCredentialStore, SkypointCredentialStore>();
+
+            // In-memory token cache backed by the persistent credential store above.
             services.AddSingleton<ISkypointTokenStore, SkypointTokenStore>();
+
+            // On startup: re-authenticates every known shop from persisted credentials.
+            // No hardcoded values — scales to any number of shops automatically.
+            services.AddHostedService<SkypointTokenBootstrapService>();
+
+            // On startup: auto-registers/updates the Shopify carrier service for every
+            // shop that has a stored OAuth token. Permanently fixes the "reinstall required"
+            // banner caused by server restarts or ngrok URL changes.
+            services.AddHostedService<CarrierServiceBootstrapService>();
 
             return services;
         }

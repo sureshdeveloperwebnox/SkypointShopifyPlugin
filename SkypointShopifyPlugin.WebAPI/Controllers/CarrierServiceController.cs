@@ -61,11 +61,15 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 }
 
                 // Build Skypoint rate request
+                // Shopify sometimes sends empty city — fall back to province then postal_code
+                var pickupSuburb = FirstNonEmpty(request.Origin.City, request.Origin.Province, request.Origin.PostalCode);
+                var dropoffSuburb = FirstNonEmpty(request.Destination.City, request.Destination.Province, request.Destination.PostalCode);
+
                 var rateRequest = new RateRequest
                 {
-                    PickUpSuburb = request.Origin.City,
+                    PickUpSuburb = pickupSuburb,
                     PickUpPostalCode = request.Origin.PostalCode,
-                    DropOffSuburb = request.Destination.City,
+                    DropOffSuburb = dropoffSuburb,
                     DropOverPostalCode = request.Destination.PostalCode,
                     ParcelsDims = request.Items.Select(item => new ParcelDimension
                     {
@@ -91,8 +95,10 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     });
                 }
 
-                _logger.LogInformation("Requesting rates: {Origin} → {Dest}, {Count} items",
-                    rateRequest.PickUpSuburb, rateRequest.DropOffSuburb, rateRequest.ParcelsDims.Count);
+                _logger.LogInformation("Requesting rates: {Origin} ({OriginPC}) → {Dest} ({DestPC}), {Count} items",
+                    rateRequest.PickUpSuburb, rateRequest.PickUpPostalCode,
+                    rateRequest.DropOffSuburb, rateRequest.DropOverPostalCode,
+                    rateRequest.ParcelsDims.Count);
 
                 var skypointRates = await _skypointApiClient.GetRatesAsync(rateRequest, skypointToken);
 
@@ -122,6 +128,9 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         }
 
         // ── helpers ───────────────────────────────────────────────────────────────
+
+        private static string FirstNonEmpty(params string[] values)
+            => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
 
         private async Task<string?> GetOrRefreshTokenAsync(string? shopDomain)
         {

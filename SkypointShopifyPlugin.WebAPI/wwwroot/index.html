@@ -84,15 +84,16 @@
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: opacity 0.2s;
         }
 
         .btn:hover {
-            transform: translateY(-2px);
+            opacity: 0.9;
         }
 
-        .btn:active {
-            transform: translateY(0);
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .toggle-link {
@@ -112,9 +113,7 @@
             text-decoration: underline;
         }
 
-        .error {
-            background: #fee;
-            color: #c33;
+        .msg {
             padding: 10px;
             border-radius: 5px;
             margin-bottom: 20px;
@@ -122,14 +121,14 @@
             display: none;
         }
 
-        .success {
+        .msg.error {
+            background: #fee;
+            color: #c33;
+        }
+
+        .msg.success {
             background: #efe;
-            color: #3c3;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: none;
+            color: #2a7a2a;
         }
     </style>
 </head>
@@ -141,8 +140,7 @@
             <p>Shopify Integration</p>
         </div>
 
-        <div id="error" class="error"></div>
-        <div id="success" class="success"></div>
+        <div id="msg" class="msg"></div>
 
         <form id="loginForm">
             <div class="form-group">
@@ -153,7 +151,7 @@
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required placeholder="Enter your password">
             </div>
-            <button type="submit" class="btn">Login</button>
+            <button type="submit" class="btn" id="loginBtn">Login</button>
         </form>
 
         <div class="toggle-link">
@@ -162,70 +160,71 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            console.log('Login page loaded');
+        const params = new URLSearchParams(window.location.search);
+        const shop = (params.get('shop') || '').replace(/^https?:\/\//i, '').replace(/\/$/, '');
 
-            const loginForm = document.getElementById('loginForm');
-            if (!loginForm) {
-                console.error('Login form not found');
-                return;
-            }
+        // If already logged in this session, go straight to dashboard
+        if (sessionStorage.getItem('skypoint_token')) {
+            redirect();
+        }
 
-            loginForm.addEventListener('submit', async function (e) {
-                e.preventDefault();
+        function redirect() {
+            window.location.href = shop
+                ? 'dashboard.html?shop=' + encodeURIComponent(shop)
+                : 'dashboard.html';
+        }
 
-                const username = document.getElementById('username').value;
-                const password = document.getElementById('password').value;
-                const errorDiv = document.getElementById('error');
-                const successDiv = document.getElementById('success');
+        function showMsg(text, type) {
+            const el = document.getElementById('msg');
+            el.textContent = text;
+            el.className = 'msg ' + type;
+            el.style.display = 'block';
+        }
 
-                errorDiv.style.display = 'none';
-                successDiv.style.display = 'none';
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
 
-                console.log('Attempting login for:', username);
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
 
-                // Get shop from URL param so server can cache token per shop
-                const shopParam = new URLSearchParams(window.location.search).get('shop') || '';
+            document.getElementById('msg').style.display = 'none';
+            btn.disabled = true;
+            btn.textContent = 'Logging in...';
 
-                try {
-                    const loginUrl = shopParam
-                        ? `/api/auth/login?shop=${encodeURIComponent(shopParam)}`
-                        : '/api/auth/login';
+            const loginUrl = shop
+                ? '/api/auth/login?shop=' + encodeURIComponent(shop)
+                : '/api/auth/login';
 
-                    const response = await fetch(loginUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            username: username,
-                            pwd: password
-                        })
-                    });
-                    const data = await response.json();
-                    console.log('Login response:', data);
+            try {
+                const response = await fetch(loginUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, pwd: password })
+                });
 
-                    if (response.ok) {
-                        // Store token in localStorage
-                        localStorage.setItem('skypoint_token', data.token);
-                        localStorage.setItem('skypoint_token_expiration', data.expiration);
-                        localStorage.setItem('skypoint_user', JSON.stringify(data.user));
+                const data = await response.json();
 
-                        // Pass ?shop= param through so dashboard can auto-register carrier
-                        const params = new URLSearchParams(window.location.search);
-                        const shop = params.get('shop') || '';
-                        if (shop) localStorage.setItem('skypoint_shop', shop);
-                        window.location.href = shop ? `dashboard.html?shop=${encodeURIComponent(shop)}` : 'dashboard.html';
-                    } else {
-                        errorDiv.textContent = data.error || 'Login failed';
-                        errorDiv.style.display = 'block';
-                    }
-                } catch (error) {
-                    console.error('Login error:', error);
-                    errorDiv.textContent = 'An error occurred. Please try again.';
-                    errorDiv.style.display = 'block';
+                if (response.ok && data.success) {
+                    // Store token in sessionStorage — lives only for this browser session,
+                    // never written to disk, cleared when tab closes.
+                    sessionStorage.setItem('skypoint_token', data.token);
+                    sessionStorage.setItem('skypoint_user', JSON.stringify(data.user || {}));
+                    if (shop) sessionStorage.setItem('skypoint_shop', shop);
+
+                    showMsg('Login successful! Redirecting...', 'success');
+                    setTimeout(redirect, 600);
+                } else {
+                    showMsg(data.error || 'Login failed. Check your credentials.', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Login';
                 }
-            });
+            } catch (err) {
+                console.error('Login error:', err);
+                showMsg('Network error. Please try again.', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Login';
+            }
         });
     </script>
 </body>

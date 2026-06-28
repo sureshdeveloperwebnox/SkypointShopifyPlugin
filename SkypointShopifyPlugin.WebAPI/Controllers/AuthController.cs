@@ -24,13 +24,15 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 
         /// <summary>
         /// Login with Skypoint credentials.
-        /// Pass ?shop=yourstore.myshopify.com so the token gets cached per shop
-        /// and used automatically by the carrier rate callback.
+        /// Pass ?shop=yourstore.myshopify.com so the server caches the token
+        /// per shop — used automatically by the carrier rate callback.
+        /// The token is returned in the JSON body; the client stores it in
+        /// sessionStorage (lives for the tab session only, never written to disk).
         /// </summary>
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            _logger.LogInformation("Login request for username: {Username}", request.Username);
+            _logger.LogInformation("Login attempt for: {Username}", request.Username);
 
             try
             {
@@ -41,14 +43,13 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 
                 if (loginResponse == null || string.IsNullOrEmpty(loginResponse.Token?.TokenValue))
                 {
-                    _logger.LogError("Login failed for username: {Username}", request.Username);
+                    _logger.LogWarning("Login failed for: {Username}", request.Username);
                     return Unauthorized(new { error = "Invalid username or password" });
                 }
 
-                _logger.LogInformation("Login successful for username: {Username}", request.Username);
-
-                // Cache credentials + token per shop so carrier callback works
-                // without any hardcoded values or file storage
+                // Cache credentials + token on the server keyed by shop.
+                // This is how the carrier rate callback (server→Skypoint) gets its token
+                // without any per-request auth header.
                 var shop = Request.Query["shop"].ToString();
                 if (string.IsNullOrEmpty(shop))
                     shop = Request.Headers["X-Shop-Domain"].ToString();
@@ -56,34 +57,36 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 if (!string.IsNullOrEmpty(shop))
                 {
                     shop = shop.Replace("https://", "").Replace("http://", "").TrimEnd('/');
-                    // Store credentials so token can be refreshed automatically when it expires
                     _skypointTokenStore.SaveCredentials(shop, request.Username, request.Pwd);
-                    // Store the current token
                     _skypointTokenStore.SaveToken(shop, loginResponse.Token.TokenValue, loginResponse.Token.Expiration);
                     _logger.LogInformation("Skypoint token cached for shop: {Shop}", shop);
                 }
 
+                _logger.LogInformation("Login successful for: {Username}", request.Username);
+
                 return Ok(new
                 {
                     success = true,
-                    token = loginResponse.Token.TokenValue,
+                    message = "Login successful",
+                    // Token returned to client — stored in sessionStorage only (not localStorage/disk)
+                    token      = loginResponse.Token.TokenValue,
                     expiration = loginResponse.Token.Expiration,
                     user = new
                     {
-                        id = loginResponse.Id,
-                        username = loginResponse.Username,
-                        email = loginResponse.Owner?.Email,
-                        firstName = loginResponse.Owner?.FirstName,
-                        lastName = loginResponse.Owner?.Surname,
-                        role = loginResponse.Role,
-                        accountNo = loginResponse.AccountNo,
-                        salesCode = loginResponse.Owner?.SalesCode
+                        id         = loginResponse.Id,
+                        username   = loginResponse.Username,
+                        email      = loginResponse.Owner?.Email,
+                        firstName  = loginResponse.Owner?.FirstName,
+                        lastName   = loginResponse.Owner?.Surname,
+                        role       = loginResponse.Role,
+                        accountNo  = loginResponse.AccountNo,
+                        salesCode  = loginResponse.Owner?.SalesCode
                     }
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during login for username: {Username}", request.Username);
+                _logger.LogError(ex, "Error during login for: {Username}", request.Username);
                 return StatusCode(500, new { error = "Internal server error" });
             }
         }
@@ -91,64 +94,64 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
-            _logger.LogInformation("Registration request for email: {Email}", request.Email);
+            _logger.LogInformation("Registration for: {Email}", request.Email);
 
             try
             {
                 if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
                     return BadRequest(new { error = "Email and password are required" });
 
-                var skypointRegisterRequest = new Core.DTOs.Skypoint.RegisterRequest
+                var skypointReq = new Core.DTOs.Skypoint.RegisterRequest
                 {
-                    Username = request.Email,
-                    Pwd = request.Password,
-                    Email = request.Email,
+                    Username  = request.Email,
+                    Pwd       = request.Password,
+                    Email     = request.Email,
                     FirstName = request.FirstName,
-                    LastName = request.LastName,
-                    Phone = request.Phone
+                    LastName  = request.LastName,
+                    Phone     = request.Phone
                 };
 
-                var registerResponse = await _skypointApiClient.RegisterAsync(skypointRegisterRequest);
+                var reg = await _skypointApiClient.RegisterAsync(skypointReq);
 
-                if (registerResponse == null || string.IsNullOrEmpty(registerResponse.Token?.TokenValue))
-                {
-                    _logger.LogError("Registration failed for email: {Email}", request.Email);
+                if (reg == null || string.IsNullOrEmpty(reg.Token?.TokenValue))
                     return BadRequest(new { error = "Registration failed" });
-                }
-
-                _logger.LogInformation("Registration successful for email: {Email}", request.Email);
 
                 return Ok(new
                 {
-                    success = true,
-                    token = registerResponse.Token.TokenValue,
-                    expiration = registerResponse.Token.Expiration,
+                    success    = true,
+                    message    = "Registration successful",
+                    token      = reg.Token.TokenValue,
+                    expiration = reg.Token.Expiration,
                     user = new
                     {
-                        id = registerResponse.Id,
-                        username = registerResponse.Username,
-                        email = registerResponse.Owner?.Email,
-                        firstName = registerResponse.Owner?.FirstName,
-                        lastName = registerResponse.Owner?.Surname,
-                        role = registerResponse.Role,
-                        accountNo = registerResponse.AccountNo
+                        id        = reg.Id,
+                        username  = reg.Username,
+                        email     = reg.Owner?.Email,
+                        firstName = reg.Owner?.FirstName,
+                        lastName  = reg.Owner?.Surname,
+                        role      = reg.Role,
+                        accountNo = reg.AccountNo
                     }
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during registration for email: {Email}", request.Email);
+                _logger.LogError(ex, "Error during registration for: {Email}", request.Email);
                 return StatusCode(500, new { error = "Internal server error" });
             }
         }
+
+        /// <summary>Logout — client clears sessionStorage; nothing to do server-side.</summary>
+        [HttpPost("logout")]
+        public IActionResult Logout() => Ok(new { success = true });
     }
 
     public class RegisterRequest
     {
-        public string Email { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
+        public string Email     { get; set; } = string.Empty;
+        public string Password  { get; set; } = string.Empty;
         public string FirstName { get; set; } = string.Empty;
-        public string LastName { get; set; } = string.Empty;
-        public string Phone { get; set; } = string.Empty;
+        public string LastName  { get; set; } = string.Empty;
+        public string Phone     { get; set; } = string.Empty;
     }
 }

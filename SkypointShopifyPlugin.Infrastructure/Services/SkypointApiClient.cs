@@ -75,20 +75,22 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         public async Task<List<RateResponse>> GetRatesAsync(RateRequest request, string authToken)
         {
             var url = _settings.GetRateQuoteUrl();
-            _logger.LogInformation("Rate request to {Url}", url);
+            var payload = JsonSerializer.Serialize(request, _jsonOptions);
+            _logger.LogInformation("Rate request to {Url} | payload: {Payload}", url, payload);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
             httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
-            httpRequest.Content = new StringContent(
-                JsonSerializer.Serialize(request, _jsonOptions),
-                Encoding.UTF8,
-                "application/json"
-            );
+            httpRequest.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
             var response = await _httpClient.SendAsync(httpRequest);
-            response.EnsureSuccessStatusCode();
 
             var responseBody = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Rate API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                response.EnsureSuccessStatusCode(); // rethrow as HttpRequestException
+            }
+
             var result = JsonSerializer.Deserialize<List<RateResponse>>(responseBody, _jsonOptions);
             
             _logger.LogInformation("Retrieved {Count} rate options", result?.Count ?? 0);
