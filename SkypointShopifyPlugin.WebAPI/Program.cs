@@ -1,13 +1,12 @@
-using DotNetEnv;
 using MediatR;
+using Microsoft.AspNetCore.HttpOverrides;
 using SkypointShopifyPlugin.Infrastructure.DependencyInjection;
-
-// Load .env file
-Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add environment variables configuration (overrides appsettings.json)
+// Standard ASP.NET Core config chain:
+//   appsettings.json → appsettings.{env}.json → Environment variables → Command-line
+// Environment variables override appsettings.json, e.g. set Shopify__ClientId in production.
 builder.Configuration.AddEnvironmentVariables();
 
 // Add services to the container
@@ -20,6 +19,7 @@ builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Progr
 
 // Add Infrastructure layer with centralized configuration
 builder.Services.AddInfrastructure(builder.Configuration);
+
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -41,9 +41,19 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+});
+
 app.UseCors("AllowAll");
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection(); // Disabled for ngrok tunnel compatibility
+app.UseDefaultFiles(); // Serves index.html for root "/"
+app.UseStaticFiles();
 app.UseAuthorization();
 app.MapControllers();
+
+// Fallback: any unmatched route serves index.html (SPA-style)
+app.MapFallbackToFile("index.html");
 
 app.Run();

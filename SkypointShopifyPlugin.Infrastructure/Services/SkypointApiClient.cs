@@ -32,7 +32,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
-            var url = $"{_settings.BaseUrl}{_settings.LoginEndpoint}";
+            var url = _settings.GetLoginUrl();
             _logger.LogInformation("Login request to {Url}", url);
 
             var content = new StringContent(
@@ -51,9 +51,30 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             return result!;
         }
 
+        public async Task<LoginResponse> RegisterAsync(RegisterRequest request)
+        {
+            var url = _settings.GetRegisterUrl();
+            _logger.LogInformation("Registration request to {Url}", url);
+
+            var content = new StringContent(
+                JsonSerializer.Serialize(request, _jsonOptions),
+                Encoding.UTF8,
+                "application/json"
+            );
+
+            var response = await _httpClient.PostAsync(url, content);
+            response.EnsureSuccessStatusCode();
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<LoginResponse>(responseBody, _jsonOptions);
+            
+            _logger.LogInformation("Registration successful for email: {Email}", request.Email);
+            return result!;
+        }
+
         public async Task<List<RateResponse>> GetRatesAsync(RateRequest request, string authToken)
         {
-            var url = $"{_settings.BaseUrl}{_settings.RateEndpoint}";
+            var url = _settings.GetRateQuoteUrl();
             _logger.LogInformation("Rate request to {Url}", url);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
@@ -76,7 +97,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public async Task<BookingResponse> CreateBookingAsync(BookingRequest request, string authToken)
         {
-            var url = $"{_settings.BaseUrl}{_settings.BookingEndpoint}";
+            var url = _settings.GetBookingUrl();
             _logger.LogInformation("Booking request to {Url}", url);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);

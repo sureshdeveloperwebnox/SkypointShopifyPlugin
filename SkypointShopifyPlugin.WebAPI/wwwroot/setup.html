@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skypoint Shipping - Setup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            width: 100%;
+            max-width: 520px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            color: #667eea;
+            font-size: 26px;
+        }
+
+        .logo p {
+            color: #888;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .step {
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #444;
+            line-height: 1.6;
+        }
+
+        .step strong {
+            color: #333;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+        }
+
+        input[type=text] {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        input[type=text]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            opacity: 0.92;
+        }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 12px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-top: 16px;
+            display: none;
+            line-height: 1.5;
+        }
+
+        .alert-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #a5d6a7;
+        }
+
+        .alert-error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #999;
+            margin-top: 12px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div class="logo">
+            <h1>Skypoint Shipping</h1>
+            <p>One-time carrier service setup</p>
+        </div>
+
+        <div class="step">
+            <strong>How to get your Shopify Access Token:</strong><br>
+            1. Go to <strong>Shopify Admin → Settings → Apps → Develop apps</strong><br>
+            2. Click <strong>"Create an app"</strong> → any name<br>
+            3. Configure scopes: enable <strong>write_shipping, read_shipping</strong> → Save<br>
+            4. Click <strong>"Install app"</strong> → copy the <code>shpat_...</code> token shown
+        </div>
+
+        <label>Shop Domain</label>
+        <input type="text" id="shop" placeholder="yourstore.myshopify.com" value="" />
+
+        <label>Shopify Access Token</label>
+        <input type="text" id="token" placeholder="shpat_xxxxxxxxxxxxxxxxxxxxxxxx" />
+
+        <button class="btn" id="btn" onclick="register()">Register Skypoint Shipping</button>
+
+        <div class="alert alert-success" id="ok"></div>
+        <div class="alert alert-error" id="err"></div>
+
+        <p class="note">This only needs to be done once per store.</p>
+    </div>
+
+    <script>
+        async function register() {
+            // Strip https:// and trailing slashes automatically
+            let shop = document.getElementById('shop').value.trim()
+                .replace(/^https?:\/\//i, '').replace(/\/$/, '');
+            document.getElementById('shop').value = shop;
+
+            const token = document.getElementById('token').value.trim();
+            const btn = document.getElementById('btn');
+            const ok = document.getElementById('ok');
+            const err = document.getElementById('err');
+
+            ok.style.display = 'none';
+            err.style.display = 'none';
+
+            if (!shop) { showErr('Enter your shop domain e.g. live-test-38278.myshopify.com'); return; }
+            if (!token) { showErr('Enter your Shopify access token (shpat_...)'); return; }
+
+            btn.disabled = true;
+            btn.textContent = 'Registering...';
+
+            try {
+                const res = await fetch('/api/admin/register-carrier', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shop, accessToken: token })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    ok.innerHTML = `<strong>✓ Success!</strong><br>${data.message}<br><br>
+                Go to <strong>Shopify → Settings → Shipping → Add shipping option</strong>
+                to add Skypoint Shipping to your zones.`;
+                    ok.style.display = 'block';
+                } else {
+                    showErr(data.error || 'Registration failed');
+                }
+            } catch (e) {
+                showErr('Network error: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Register Skypoint Shipping';
+            }
+        }
+
+        function showErr(msg) {
+            const err = document.getElementById('err');
+            err.textContent = msg;
+            err.style.display = 'block';
+        }
+    </script>
+</body>
+
+</html>

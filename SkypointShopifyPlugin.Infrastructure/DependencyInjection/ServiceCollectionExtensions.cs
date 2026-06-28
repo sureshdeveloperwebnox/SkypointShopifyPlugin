@@ -30,6 +30,16 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(30);
             });
 
+            services.AddHttpClient<IShopifyAdminService, ShopifyAdminService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+
+            // File-backed token store — persists OAuth tokens across server restarts.
+            // Tokens are written to data/shop_tokens.json on first install and loaded on startup.
+            services.AddSingleton<IShopTokenStore, FileBackedShopTokenStore>();
+            services.AddSingleton<ISkypointTokenStore, SkypointTokenStore>();
+
             return services;
         }
     }
