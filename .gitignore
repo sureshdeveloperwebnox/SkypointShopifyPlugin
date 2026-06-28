@@ -25,6 +25,7 @@ bld/
 [Ll]ogs/
 **/obj/
 **/bin/
+**/publish/
 
 # Visual Studio cache/options directory
 .vs/
