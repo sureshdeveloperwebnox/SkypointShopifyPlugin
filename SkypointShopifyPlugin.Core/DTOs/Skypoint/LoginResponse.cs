@@ -61,7 +61,7 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         [JsonPropertyName("confirmationTime")]
         public DateTime? ConfirmationTime { get; set; }
         [JsonPropertyName("codeExpirationTime")]
-        public DateTime CodeExpirationTime { get; set; }
+        public DateTime? CodeExpirationTime { get; set; }
         [JsonPropertyName("resendOtpCount")]
         public int? ResendOtpCount { get; set; }
     }

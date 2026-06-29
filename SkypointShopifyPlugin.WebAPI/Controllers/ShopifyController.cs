@@ -304,7 +304,8 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 
                 lock (ProcessedOrderBookingsLock)
                 {
-                    if (ProcessedOrderBookings.TryGetValue(shopifyOrder.id, out var existingBooking))
+                    var orderIdString = shopifyOrder.id.ToString();
+                    if (ProcessedOrderBookings.TryGetValue(orderIdString, out var existingBooking))
                     {
                         _logger.LogInformation(
                             "Shopify order {OrderId} already processed as Skypoint booking {BookingId}",
@@ -365,18 +366,44 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 var bookingRequest = MapShopifyOrderToSkypointBooking(shopifyOrder, skypointUserId);
 
                 // Create booking in Skypoint
-                var bookingResponse = await _skypointApiClient.CreateBookingAsync(bookingRequest, token);
+                BookingResponse? bookingResponse = null;
+                try
+                {
+                    bookingResponse = await _skypointApiClient.CreateBookingAsync(bookingRequest, token);
+                }
+                catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogWarning(ex, "Skypoint API rejected booking due to invalid postal code/suburb for order {OrderId}. Order: {OrderNumber}, Pickup: {PickupPCode}/{FromSuburb}, Dropoff: {DropOffPCode}/{ToSuburb}",
+                        shopifyOrder.id, shopifyOrder.order_number, bookingRequest.PickUpPCode, bookingRequest.FromSuburb, bookingRequest.DropOffPCode, bookingRequest.ToSuburb);
+                    
+                    return StatusCode(400, new { 
+                        error = "Skypoint API rejected booking - invalid postal code/suburb combination",
+                        message = "The pickup or dropoff location is not supported by Skypoint",
+                        shopifyOrderId = shopifyOrder.id,
+                        orderNumber = shopifyOrder.order_number,
+                        pickupPCode = bookingRequest.PickUpPCode,
+                        pickupSuburb = bookingRequest.FromSuburb,
+                        dropOffPCode = bookingRequest.DropOffPCode,
+                        dropOffSuburb = bookingRequest.ToSuburb
+                    });
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogError(ex, "Skypoint API error for order {OrderId}", shopifyOrder.id);
+                    return StatusCode(500, new { error = "Skypoint API error", message = ex.Message });
+                }
 
                 if (bookingResponse != null)
                 {
                     lock (ProcessedOrderBookingsLock)
                     {
-                        ProcessedOrderBookings[shopifyOrder.id] = bookingResponse;
+                        var orderIdString = shopifyOrder.id.ToString();
+                        ProcessedOrderBookings[orderIdString] = bookingResponse;
                     }
 
                     _logger.LogInformation("Successfully created Skypoint booking for Shopify order {OrderId}", shopifyOrder.id);
-                    return Ok(new { 
-                        message = "Order processed successfully", 
+                    return Ok(new {
+                        message = "Order processed successfully",
                         shopifyOrderId = shopifyOrder.id,
                         skypointBookingId = bookingResponse.Id,
                         skypointTrackNo = bookingResponse.TrackNo,
@@ -504,7 +531,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             var parcelType = "A4_Text_Book";
             var lineItems = shopifyOrder.line_items.Count > 0
                 ? shopifyOrder.line_items
-                : new List<ShopifyLineItem> { new() { sku = shopifyOrder.order_number, quantity = 1 } };
+                : new List<ShopifyLineItem> { new() { sku = shopifyOrder.order_number.ToString(), quantity = 1 } };
 
             return new BookingRequest
             {
@@ -550,7 +577,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     ParcelBreadth = 30.0,
                     ParcelHeight = 23.0,
                     PredefinedParcel = parcelType,
-                    ParcelReference = FirstNonEmpty(item.sku, item.title, shopifyOrder.order_number),
+                    ParcelReference = FirstNonEmpty(item.sku, item.title, shopifyOrder.order_number.ToString()),
                     SelectedParcel = parcelType
                 }).ToList(),
                 PickUpCity = FirstNonEmpty(billingAddress?.city, " "),

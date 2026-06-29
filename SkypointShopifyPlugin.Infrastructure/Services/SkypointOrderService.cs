@@ -1,0 +1,310 @@
+using Microsoft.Extensions.Logging;
+using SkypointShopifyPlugin.Core.DTOs.Skypoint;
+using SkypointShopifyPlugin.Core.Interfaces;
+
+namespace SkypointShopifyPlugin.Infrastructure.Services
+{
+    /// <summary>
+    /// Service for managing Skypoint orders
+    /// Handles order creation, processing, and lifecycle management
+    /// Mirrors the order processing logic from Shopify integration
+    /// </summary>
+    public class SkypointOrderService : ISkypointOrderService
+    {
+        private readonly ILogger<SkypointOrderService> _logger;
+        private readonly ISkypointOrderStore _orderStore;
+        private readonly ISkypointApiClient _skypointApiClient;
+        private readonly ISkypointTokenStore _skypointTokenStore;
+
+        public SkypointOrderService(
+            ILogger<SkypointOrderService> logger,
+            ISkypointOrderStore orderStore,
+            ISkypointApiClient skypointApiClient,
+            ISkypointTokenStore skypointTokenStore)
+        {
+            _logger = logger;
+            _orderStore = orderStore;
+            _skypointApiClient = skypointApiClient;
+            _skypointTokenStore = skypointTokenStore;
+        }
+
+        public async Task<SkypointOrderResponse> CreateOrderAsync(CreateSkypointOrderRequest request, bool autoProcess = true)
+        {
+            try
+            {
+                _logger.LogInformation("Creating Skypoint order {OrderNumber}", request.OrderNumber);
+
+                // Check if order already exists
+                var existingOrder = await _orderStore.GetOrderByNumberAsync(request.OrderNumber);
+                if (existingOrder != null)
+                {
+                    _logger.LogWarning("Order {OrderNumber} already exists with ID {OrderId}", request.OrderNumber, existingOrder.Id);
+                    return new SkypointOrderResponse
+                    {
+                        Success = false,
+                        Message = $"Order {request.OrderNumber} already exists",
+                        Order = existingOrder
+                    };
+                }
+
+                // Map request to order
+                var order = SkypointOrderMapper.MapToSkypointOrder(request);
+
+                // Save order
+                await _orderStore.SaveOrderAsync(order);
+                _logger.LogInformation("Saved order {OrderId} with number {OrderNumber}", order.Id, order.OrderNumber);
+
+                // Auto-process if requested
+                if (autoProcess)
+                {
+                    var processResult = await ProcessOrderAsync(order.Id);
+                    if (processResult.Success)
+                    {
+                        return processResult;
+                    }
+                    else
+                    {
+                        // Return order even if processing failed
+                        return new SkypointOrderResponse
+                        {
+                            Success = true,
+                            Message = $"Order created but processing failed: {processResult.Message}",
+                            Order = order
+                        };
+                    }
+                }
+
+                return new SkypointOrderResponse
+                {
+                    Success = true,
+                    Message = "Order created successfully",
+                    Order = order
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating Skypoint order {OrderNumber}", request.OrderNumber);
+                return new SkypointOrderResponse
+                {
+                    Success = false,
+                    Message = $"Error creating order: {ex.Message}"
+                };
+            }
+        }
+
+        public async Task<SkypointOrderResponse> ProcessOrderAsync(string orderId)
+        {
+            try
+            {
+                _logger.LogInformation("Processing order {OrderId}", orderId);
+
+                // Get order
+                var order = await _orderStore.GetOrderByIdAsync(orderId);
+                if (order == null)
+                {
+                    _logger.LogError("Order {OrderId} not found", orderId);
+                    return new SkypointOrderResponse
+                    {
+                        Success = false,
+                        Message = "Order not found"
+                    };
+                }
+
+                // Check if already processed
+                if (await _orderStore.IsOrderProcessedAsync(orderId))
+                {
+                    _logger.LogInformation("Order {OrderId} already processed with booking {BookingId}", orderId, order.SkypointBookingId);
+                    return new SkypointOrderResponse
+                    {
+                        Success = true,
+                        Message = "Order already processed",
+                        Order = order,
+                        SkypointBookingId = order.SkypointBookingId,
+                        SkypointTrackNo = order.SkypointTrackNo
+                    };
+                }
+
+                // Get Skypoint token and user ID
+                var vendorId = order.VendorId ?? "default";
+                var token = _skypointTokenStore.GetToken(vendorId);
+                var skypointUserId = _skypointTokenStore.GetUserId(vendorId);
+
+                if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(skypointUserId))
+                {
+                    _logger.LogError("No Skypoint credentials for vendor {VendorId}", vendorId);
+                    return new SkypointOrderResponse
+                    {
+                        Success = false,
+                        Message = "Skypoint credentials not configured",
+                        Order = order
+                    };
+                }
+
+                // Map order to booking request
+                var bookingRequest = SkypointOrderMapper.MapToBookingRequest(order, skypointUserId);
+
+                // Create booking
+                var bookingResponse = await _skypointApiClient.CreateBookingAsync(bookingRequest, token);
+
+                if (bookingResponse != null)
+                {
+                    // Update order with booking details
+                    SkypointOrderMapper.UpdateWithBookingResponse(order, bookingResponse);
+                    await _orderStore.UpdateOrderAsync(order);
+
+                    _logger.LogInformation(
+                        "Successfully created Skypoint booking {TrackNo} for order {OrderId}",
+                        bookingResponse.TrackNo,
+                        orderId);
+
+                    return new SkypointOrderResponse
+                    {
+                        Success = true,
+                        Message = "Order processed successfully",
+                        Order = order,
+                        SkypointBookingId = bookingResponse.Id,
+                        SkypointTrackNo = bookingResponse.TrackNo
+                    };
+                }
+                else
+                {
+                    _logger.LogError("Failed to create Skypoint booking for order {OrderId}", orderId);
+                    return new SkypointOrderResponse
+                    {
+                        Success = false,
+                        Message = "Failed to create Skypoint booking",
+                        Order = order
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing order {OrderId}", orderId);
+                return new SkypointOrderResponse
+                {
+                    Success = false,
+                    Message = $"Error processing order: {ex.Message}"
+                };
+            }
+        }
+
+        public async Task<SkypointOrder?> GetOrderByIdAsync(string orderId)
+        {
+            return await _orderStore.GetOrderByIdAsync(orderId);
+        }
+
+        public async Task<SkypointOrder?> GetOrderByNumberAsync(string orderNumber)
+        {
+            return await _orderStore.GetOrderByNumberAsync(orderNumber);
+        }
+
+        public async Task<SkypointOrderListResponse> GetOrdersAsync(SkypointOrderFilter filter)
+        {
+            try
+            {
+                var orders = await _orderStore.GetOrdersAsync(filter);
+                var total = await _orderStore.GetOrderCountAsync(filter);
+
+                return new SkypointOrderListResponse
+                {
+                    Success = true,
+                    Orders = orders,
+                    Pagination = new PaginationInfo
+                    {
+                        Page = filter.Page,
+                        Limit = filter.Limit,
+                        Total = total,
+                        TotalPages = (int)Math.Ceiling((double)total / filter.Limit)
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting orders with filter");
+                return new SkypointOrderListResponse
+                {
+                    Success = false,
+                    Orders = new List<SkypointOrder>()
+                };
+            }
+        }
+
+        public async Task<bool> UpdateOrderStatusAsync(string orderId, string status)
+        {
+            try
+            {
+                var order = await _orderStore.GetOrderByIdAsync(orderId);
+                if (order == null)
+                {
+                    _logger.LogError("Order {OrderId} not found for status update", orderId);
+                    return false;
+                }
+
+                order.Status = status;
+                order.UpdatedAt = DateTime.UtcNow;
+                await _orderStore.UpdateOrderAsync(order);
+
+                _logger.LogInformation("Updated order {OrderId} status to {Status}", orderId, status);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating order {OrderId} status", orderId);
+                return false;
+            }
+        }
+
+        public async Task<bool> UpdateOrderWithBookingAsync(string orderId, string bookingId, string trackNo, string status)
+        {
+            try
+            {
+                await _orderStore.MarkOrderAsProcessedAsync(orderId, bookingId, trackNo, status);
+                _logger.LogInformation("Updated order {OrderId} with booking {BookingId}", orderId, bookingId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating order {OrderId} with booking details", orderId);
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteOrderAsync(string orderId)
+        {
+            try
+            {
+                await _orderStore.DeleteOrderAsync(orderId);
+                _logger.LogInformation("Deleted order {OrderId}", orderId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting order {OrderId}", orderId);
+                return false;
+            }
+        }
+
+        public async Task<bool> SyncOrderStatusAsync(string orderId)
+        {
+            try
+            {
+                var order = await _orderStore.GetOrderByIdAsync(orderId);
+                if (order == null || string.IsNullOrEmpty(order.SkypointBookingId))
+                {
+                    _logger.LogWarning("Cannot sync status for order {OrderId} - not found or no booking", orderId);
+                    return false;
+                }
+
+                // TODO: Implement status sync with Skypoint API
+                // This would require a new API method to get booking status
+                _logger.LogInformation("Status sync for order {OrderId} not yet implemented", orderId);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing status for order {OrderId}", orderId);
+                return false;
+            }
+        }
+    }
+}

@@ -394,5 +394,38 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             return await _httpClient.SendAsync(req);
         }
+
+        public async Task<string> GetOrdersJsonAsync(string shopDomain, string accessToken, DateTime? since = null)
+        {
+            try
+            {
+                var url = $"https://{shopDomain}/admin/api/2024-01/orders.json";
+                
+                if (since.HasValue)
+                {
+                    var sinceParam = since.Value.ToString("yyyy-MM-ddTHH:mm:ssZ");
+                    url += $"?created_at_min={Uri.EscapeDataString(sinceParam)}&status=any";
+                }
+
+                var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.Add("X-Shopify-Access-Token", accessToken);
+
+                var resp = await _httpClient.SendAsync(req);
+                var body = await resp.Content.ReadAsStringAsync();
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Failed to get orders from Shopify: {Status} - {Body}", resp.StatusCode, body);
+                    return "[]";
+                }
+
+                return body;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching orders from Shopify for {Shop}", shopDomain);
+                return "[]";
+            }
+        }
     }
 }

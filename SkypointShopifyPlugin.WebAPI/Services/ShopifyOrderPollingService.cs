@@ -2,6 +2,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using SkypointShopifyPlugin.Core.DTOs.Shopify;
+using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.Core.Interfaces;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services;
@@ -212,17 +214,17 @@ public class ShopifyOrderPollingService : BackgroundService
 
         var customerEmail = customer?.email ?? "";
         var dropOffPhone = shippingAddress?.phone ?? customer?.phone ?? "";
-        var pickUpPhone = billingAddress?.phone ?? customer?.phone ?? "";
+        var pickUpPhone = customer?.phone ?? "";
 
-        var pickupDate = string.IsNullOrEmpty(order.created_at) 
+        var pickupDate = order.created_at == default 
             ? DateTime.UtcNow 
-            : DateTime.Parse(order.created_at);
+            : order.created_at;
 
         var parcelType = "A4_Text_Book";
 
         var lineItems = order.line_items?.Count > 0
             ? order.line_items
-            : new List<ShopifyLineItem> { new() { sku = order.order_number, quantity = 1 } };
+            : new List<ShopifyLineItem> { new() { sku = order.order_number.ToString(), quantity = 1 } };
 
         return new BookingRequest
         {
@@ -268,7 +270,7 @@ public class ShopifyOrderPollingService : BackgroundService
                 ParcelBreadth = 30.0,
                 ParcelHeight = 23.0,
                 PredefinedParcel = parcelType,
-                ParcelReference = FirstNonEmpty(item.sku, item.title, order.order_number),
+                ParcelReference = FirstNonEmpty(item.sku, item.title, order.order_number.ToString()),
                 SelectedParcel = parcelType
             }).ToList(),
             PickUpCity = FirstNonEmpty(billingAddress?.city, " "),

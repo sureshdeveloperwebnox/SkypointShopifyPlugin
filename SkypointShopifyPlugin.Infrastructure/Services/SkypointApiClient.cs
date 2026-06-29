@@ -113,10 +113,11 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
             var response = await _httpClient.SendAsync(httpRequest);
             var responseBody = await response.Content.ReadAsStringAsync();
+            
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("Booking API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
-                response.EnsureSuccessStatusCode();
+                throw new HttpRequestException($"Skypoint API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
             }
 
             var result = JsonSerializer.Deserialize<BookingResponse>(responseBody, _jsonOptions);

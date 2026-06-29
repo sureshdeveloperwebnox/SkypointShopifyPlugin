@@ -19,6 +19,11 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
             {
                 configuration.GetSection(ShopifySettings.SectionName).Bind(options);
             });
+
+            services.Configure<SkypointOrderStoreOptions>(options =>
+            {
+                configuration.GetSection(SkypointOrderStoreOptions.SectionName).Bind(options);
+            });
             
             services.AddHttpClient<ISkypointApiClient, SkypointApiClient>(client =>
             {
@@ -46,6 +51,13 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
 
             // In-memory token cache backed by the persistent credential store above.
             services.AddSingleton<ISkypointTokenStore, SkypointTokenStore>();
+
+            // Skypoint order store — persists orders to JSON files in data directory.
+            // Shares the same data directory structure as token stores.
+            services.AddSingleton<ISkypointOrderStore, SkypointOrderStore>();
+
+            // Skypoint order service — handles order creation, processing, and management.
+            services.AddScoped<ISkypointOrderService, SkypointOrderService>();
 
             // On startup: re-authenticates every known shop from persisted credentials.
             // No hardcoded values — scales to any number of shops automatically.

@@ -28,6 +28,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 var tokenDataDir = Path.Combine(builder.Environment.ContentRootPath, "data");
 builder.Services.Configure<ShopTokenStoreOptions>(opts => opts.DataDirectory = tokenDataDir);
 builder.Services.Configure<SkypointCredentialStoreOptions>(opts => opts.DataDirectory = tokenDataDir);
+builder.Services.Configure<SkypointOrderStoreOptions>(opts => opts.DataDirectory = Path.Combine(tokenDataDir, "orders"));
 
 
 // Add CORS — allow all origins with credentials for ngrok/iframe compatibility
