@@ -26,7 +26,7 @@ namespace SkypointShopifyPlugin.Application.Features.Skypoint.Commands
                     PickUpSuburb = request.PickUpSuburb,
                     PickUpPostalCode = request.PickUpPostalCode,
                     DropOffSuburb = request.DropOffSuburb,
-                    DropOverPostalCode = request.DropOffPostalCode,
+                    DropOffPostalCode = request.DropOffPostalCode,
                     ParcelsDims = request.ParcelsDims
                 };
 

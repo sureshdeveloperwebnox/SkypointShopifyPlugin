@@ -3837,8 +3837,8 @@
         "net9.0": {
           "targetAlias": "net9.0",
           "projectReferences": {
-            "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {
-              "projectPath": "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj"
+            "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {
+              "projectPath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj"
             },
             "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Core\\SkypointShopifyPlugin.Core.csproj": {
               "projectPath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Core\\SkypointShopifyPlugin.Core.csproj"

@@ -13,9 +13,8 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         [JsonPropertyName("dropOffSuburb")]
         public string DropOffSuburb { get; set; } = string.Empty;
 
-        /// <summary>Note: Skypoint API uses "dropOver" (not "dropOff") in the field name.</summary>
-        [JsonPropertyName("dropOverPostalCode")]
-        public string DropOverPostalCode { get; set; } = string.Empty;
+        [JsonPropertyName("dropOffPostalCode")]
+        public string DropOffPostalCode { get; set; } = string.Empty;
 
         [JsonPropertyName("parcelsDims")]
         public List<ParcelDimension> ParcelsDims { get; set; } = new();

@@ -78,7 +78,9 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 // Save it so future calls don't need the token
                 _shopTokenStore.SaveToken(shop, accessToken);
 
-                var carrierServiceUrl = $"{Request.Scheme}://{Request.Host}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
+                // Use public base URL from configuration (ngrok HTTPS URL) instead of localhost
+                var publicBase = BuildPublicBaseUrl(_configuration);
+                var carrierServiceUrl = $"{publicBase}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
                 var (registered, message) = await _shopifyAdminService.RegisterAndAssignCarrierServiceAsync(shop, accessToken, carrierServiceUrl);
 
                 if (registered)
@@ -132,6 +134,18 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 _logger.LogError(ex, "Error syncing webhooks for shop: {Shop}", shop);
                 return StatusCode(500, new { error = "Internal server error: " + ex.Message });
             }
+        }
+
+        private static string BuildPublicBaseUrl(IConfiguration configuration)
+        {
+            var redirectUri = configuration["Shopify:RedirectUri"];
+            if (!string.IsNullOrEmpty(redirectUri))
+            {
+                var uri = new Uri(redirectUri);
+                return $"{uri.Scheme}://{uri.Host}";
+            }
+            // Fallback — won't be HTTPS, so registration will fail
+            return "http://localhost";
         }
     }
 

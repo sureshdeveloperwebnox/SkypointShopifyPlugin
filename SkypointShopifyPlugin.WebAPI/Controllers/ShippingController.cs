@@ -60,7 +60,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     PickUpSuburb = request.PickupCity,
                     PickUpPostalCode = request.PickupPostalCode,
                     DropOffSuburb = request.DeliveryCity,
-                    DropOverPostalCode = request.DeliveryPostalCode,
+                    DropOffPostalCode = request.DeliveryPostalCode,
                     ParcelsDims = request.ParcelDimensions.Select(pd => new ParcelDimension
                     {
                         ParcelMass = pd.Weight,
