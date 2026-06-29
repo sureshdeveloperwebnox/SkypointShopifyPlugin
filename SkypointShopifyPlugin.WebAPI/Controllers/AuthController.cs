@@ -58,7 +58,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 {
                     shop = shop.Replace("https://", "").Replace("http://", "").TrimEnd('/');
                     _skypointTokenStore.SaveCredentials(shop, request.Username, request.Pwd);
-                    _skypointTokenStore.SaveToken(shop, loginResponse.Token.TokenValue, loginResponse.Token.Expiration);
+                    _skypointTokenStore.SaveToken(shop, loginResponse.Token.TokenValue, loginResponse.Token.Expiration, loginResponse.Id);
                     _logger.LogInformation("Skypoint token cached for shop: {Shop}", shop);
                 }
 

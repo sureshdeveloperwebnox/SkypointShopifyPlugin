@@ -16,7 +16,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
     /// </summary>
     public class SkypointTokenStore : ISkypointTokenStore
     {
-        private record TokenEntry(string Token, DateTime Expiration);
+        private record TokenEntry(string Token, DateTime Expiration, string? UserId);
 
         private readonly ConcurrentDictionary<string, TokenEntry> _tokens =
             new(StringComparer.OrdinalIgnoreCase);
@@ -31,14 +31,22 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         public void SaveCredentials(string shopDomain, string username, string password)
             => _credentialStore.Save(shopDomain, username, password);
 
-        public void SaveToken(string shopDomain, string skypointToken, DateTime expiration)
-            => _tokens[Normalize(shopDomain)] = new TokenEntry(skypointToken, expiration);
+        public void SaveToken(string shopDomain, string skypointToken, DateTime expiration, string? userId = null)
+            => _tokens[Normalize(shopDomain)] = new TokenEntry(skypointToken, expiration, userId);
 
         public string? GetToken(string shopDomain)
         {
             var key = Normalize(shopDomain);
             if (_tokens.TryGetValue(key, out var entry) && entry.Expiration > DateTime.UtcNow)
                 return entry.Token;
+            return null;
+        }
+
+        public string? GetUserId(string shopDomain)
+        {
+            var key = Normalize(shopDomain);
+            if (_tokens.TryGetValue(key, out var entry) && entry.Expiration > DateTime.UtcNow)
+                return entry.UserId;
             return null;
         }
 

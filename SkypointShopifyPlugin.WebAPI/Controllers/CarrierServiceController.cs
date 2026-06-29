@@ -159,7 +159,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 
                 if (loginResponse?.Token?.TokenValue != null)
                 {
-                    _skypointTokenStore.SaveToken(shopDomain, loginResponse.Token.TokenValue, loginResponse.Token.Expiration);
+                    _skypointTokenStore.SaveToken(shopDomain, loginResponse.Token.TokenValue, loginResponse.Token.Expiration, loginResponse.Id);
                     _logger.LogInformation("Token refreshed for shop {Shop}", shopDomain);
                     return loginResponse.Token.TokenValue;
                 }

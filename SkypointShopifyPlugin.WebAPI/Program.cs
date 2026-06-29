@@ -63,6 +63,9 @@ app.UseStaticFiles();
 app.UseAuthorization();
 app.MapControllers();
 
+// Unknown API routes should stay API-shaped instead of falling through to the SPA file fallback.
+app.Map("/api/{**catchAll}", () => Results.NotFound());
+
 // Fallback: any unmatched route serves index.html (SPA-style)
 app.MapFallbackToFile("index.html");
 

@@ -23,6 +23,65 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             return success;
         }
 
+        public async Task<(bool success, string message)> SyncWebhooksAsync(
+            string shopDomain,
+            string accessToken,
+            string publicBaseUrl)
+        {
+            try
+            {
+                publicBaseUrl = publicBaseUrl.TrimEnd('/');
+                var desiredWebhooks = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["orders/create"] = $"{publicBaseUrl}/api/shopify/orders/create",
+                    ["orders/updated"] = $"{publicBaseUrl}/api/shopify/orders/updated",
+                    ["orders/cancelled"] = $"{publicBaseUrl}/api/shopify/orders/cancelled",
+                    ["app/uninstalled"] = $"{publicBaseUrl}/api/shopify/app/uninstalled"
+                };
+
+                var managedTopics = desiredWebhooks.Keys
+                    .Append("orders/paid")
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var existing = await GetWebhooksAsync(shopDomain, accessToken);
+                var deleted = 0;
+                var created = 0;
+
+                foreach (var webhook in existing)
+                {
+                    if (!managedTopics.Contains(webhook.Topic))
+                        continue;
+
+                    if (desiredWebhooks.TryGetValue(webhook.Topic, out var desiredAddress)
+                        && webhook.Address.Equals(desiredAddress, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (await DeleteWebhookAsync(shopDomain, accessToken, webhook.Id))
+                        deleted++;
+                }
+
+                existing = await GetWebhooksAsync(shopDomain, accessToken);
+                foreach (var (topic, address) in desiredWebhooks)
+                {
+                    var alreadyExists = existing.Any(webhook =>
+                        webhook.Topic.Equals(topic, StringComparison.OrdinalIgnoreCase)
+                        && webhook.Address.Equals(address, StringComparison.OrdinalIgnoreCase));
+
+                    if (!alreadyExists && await CreateWebhookAsync(shopDomain, accessToken, topic, address))
+                        created++;
+                }
+
+                return (true, $"Webhook sync complete. Deleted stale: {deleted}, created: {created}.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing Shopify webhooks for {Shop}", shopDomain);
+                return (false, $"Exception: {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// Creates the carrier service via REST API.
         /// Shopify automatically makes it available in the shipping profile UI
@@ -126,6 +185,68 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         }
 
         // ── helpers ───────────────────────────────────────────────────────────────────────
+
+        private record ShopifyWebhook(string Id, string Topic, string Address);
+
+        private async Task<List<ShopifyWebhook>> GetWebhooksAsync(string shopDomain, string accessToken)
+        {
+            var url = $"https://{shopDomain}/admin/api/2024-01/webhooks.json";
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("X-Shopify-Access-Token", accessToken);
+
+            var resp = await _httpClient.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
+            _logger.LogInformation("Existing webhooks response {Status}: {Body}", resp.StatusCode, body);
+
+            if (!resp.IsSuccessStatusCode)
+                return new List<ShopifyWebhook>();
+
+            var json = JsonNode.Parse(body);
+            var webhooks = json?["webhooks"]?.AsArray();
+            if (webhooks == null)
+                return new List<ShopifyWebhook>();
+
+            return webhooks
+                .Select(webhook => new ShopifyWebhook(
+                    webhook?["id"]?.ToString() ?? string.Empty,
+                    webhook?["topic"]?.ToString() ?? string.Empty,
+                    webhook?["address"]?.ToString() ?? string.Empty))
+                .Where(webhook => !string.IsNullOrEmpty(webhook.Id))
+                .ToList();
+        }
+
+        private async Task<bool> DeleteWebhookAsync(string shopDomain, string accessToken, string webhookId)
+        {
+            var url = $"https://{shopDomain}/admin/api/2024-01/webhooks/{webhookId}.json";
+            var req = new HttpRequestMessage(HttpMethod.Delete, url);
+            req.Headers.Add("X-Shopify-Access-Token", accessToken);
+
+            var resp = await _httpClient.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
+            _logger.LogInformation("Delete webhook {WebhookId} response {Status}: {Body}", webhookId, resp.StatusCode, body);
+
+            return resp.IsSuccessStatusCode;
+        }
+
+        private async Task<bool> CreateWebhookAsync(string shopDomain, string accessToken, string topic, string address)
+        {
+            var url = $"https://{shopDomain}/admin/api/2024-01/webhooks.json";
+            var bodyObj = new
+            {
+                webhook = new
+                {
+                    topic,
+                    address,
+                    format = "json"
+                }
+            };
+
+            var resp = await PostJsonAsync(url, accessToken, bodyObj);
+            var body = await resp.Content.ReadAsStringAsync();
+            _logger.LogInformation("Create webhook {Topic} response {Status}: {Body}", topic, resp.StatusCode, body);
+
+            return resp.IsSuccessStatusCode;
+        }
 
         private async Task<int> AssignCarrierToAllZonesAsync(string shopDomain, string accessToken, string carrierId)
         {

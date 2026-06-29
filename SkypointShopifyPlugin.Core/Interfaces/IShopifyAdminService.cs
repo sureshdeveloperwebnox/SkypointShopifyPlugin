@@ -4,5 +4,6 @@ namespace SkypointShopifyPlugin.Core.Interfaces
     {
         Task<bool> RegisterCarrierServiceAsync(string shopDomain, string accessToken, string carrierServiceUrl);
         Task<(bool success, string message)> RegisterAndAssignCarrierServiceAsync(string shopDomain, string accessToken, string carrierServiceUrl);
+        Task<(bool success, string message)> SyncWebhooksAsync(string shopDomain, string accessToken, string publicBaseUrl);
     }
 }

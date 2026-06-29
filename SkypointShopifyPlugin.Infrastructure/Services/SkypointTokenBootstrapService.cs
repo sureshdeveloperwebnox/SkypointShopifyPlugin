@@ -88,7 +88,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     return;
                 }
 
-                tokenStore.SaveToken(shop, loginResponse.Token.TokenValue, loginResponse.Token.Expiration);
+                tokenStore.SaveToken(shop, loginResponse.Token.TokenValue, loginResponse.Token.Expiration, loginResponse.Id);
                 _logger.LogInformation("Token bootstrapped for shop: {Shop} (expires {Exp:u})",
                     shop, loginResponse.Token.Expiration);
             }

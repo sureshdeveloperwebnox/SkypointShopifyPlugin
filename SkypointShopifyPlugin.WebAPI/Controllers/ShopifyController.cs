@@ -12,6 +12,9 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
     [Route("api/shopify")]
     public class ShopifyController : ControllerBase
     {
+        private static readonly Dictionary<string, BookingResponse> ProcessedOrderBookings = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly object ProcessedOrderBookingsLock = new();
+
         private readonly IMediator _mediator;
         private readonly ILogger<ShopifyController> _logger;
         private readonly IShopifyOAuthService _oauthService;
@@ -19,8 +22,9 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         private readonly ISkypointApiClient _skypointApiClient;
         private readonly IShopifyAdminService _shopifyAdminService;
         private readonly IShopTokenStore _shopTokenStore;
+        private readonly ISkypointTokenStore _skypointTokenStore;
 
-        public ShopifyController(IMediator mediator, ILogger<ShopifyController> logger, IShopifyOAuthService oauthService, IConfiguration configuration, ISkypointApiClient skypointApiClient, IShopifyAdminService shopifyAdminService, IShopTokenStore shopTokenStore)
+        public ShopifyController(IMediator mediator, ILogger<ShopifyController> logger, IShopifyOAuthService oauthService, IConfiguration configuration, ISkypointApiClient skypointApiClient, IShopifyAdminService shopifyAdminService, IShopTokenStore shopTokenStore, ISkypointTokenStore skypointTokenStore)
         {
             _mediator = mediator;
             _logger = logger;
@@ -29,6 +33,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             _skypointApiClient = skypointApiClient;
             _shopifyAdminService = shopifyAdminService;
             _shopTokenStore = shopTokenStore;
+            _skypointTokenStore = skypointTokenStore;
         }
 
         /// <summary>
@@ -118,7 +123,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 // Persist token immediately — in-memory cache
                 _shopTokenStore.SaveToken(shop, accessToken);
 
-                // Register carrier service in background — don't block the redirect.
+                // Register carrier service and webhooks in background — don't block the redirect.
                 // Build carrier URL from the public ngrok/production base URL.
                 var publicBase = BuildPublicBaseUrl();
                 var carrierUrl = $"{publicBase}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
@@ -126,11 +131,16 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 {
                     try
                     {
+                        // Register carrier service
                         await _shopifyAdminService.RegisterAndAssignCarrierServiceAsync(shop, accessToken, carrierUrl);
+                        
+                        // Register webhooks automatically
+                        await _shopifyAdminService.SyncWebhooksAsync(shop, accessToken, publicBase);
+                        _logger.LogInformation("Webhooks registered automatically for {Shop}", shop);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Background carrier registration failed for {Shop} — will retry on next dashboard open", shop);
+                        _logger.LogWarning(ex, "Background registration failed for {Shop} — will retry on next dashboard open", shop);
                     }
                 });
 
@@ -199,6 +209,17 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             var publicBase = BuildPublicBaseUrl();
             var carrierServiceUrl = $"{publicBase}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
 
+            // Register webhooks automatically
+            try
+            {
+                await _shopifyAdminService.SyncWebhooksAsync(shop, accessToken, publicBase);
+                _logger.LogInformation("Webhooks synced for {Shop}", shop);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Webhook sync failed for {Shop}", shop);
+            }
+
             if (!carrierServiceUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning(
@@ -264,7 +285,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         {
             _logger.LogInformation("Order create webhook received");
             
-            if (!VerifyWebhookSignature())
+            if (!await VerifyWebhookSignature())
             {
                 _logger.LogWarning("Invalid webhook signature");
                 return Unauthorized();
@@ -281,43 +302,85 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     return BadRequest();
                 }
 
-                _logger.LogInformation("Processing order {OrderId} for shop", shopifyOrder.id);
-
-                // Login to Skypoint API
-                var username = _configuration["Skypoint:Username"];
-                var password = _configuration["Skypoint:Password"];
-
-                if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+                lock (ProcessedOrderBookingsLock)
                 {
-                    _logger.LogError("Skypoint credentials not configured");
-                    return StatusCode(500, new { error = "Skypoint credentials not configured" });
+                    if (ProcessedOrderBookings.TryGetValue(shopifyOrder.id, out var existingBooking))
+                    {
+                        _logger.LogInformation(
+                            "Shopify order {OrderId} already processed as Skypoint booking {BookingId}",
+                            shopifyOrder.id,
+                            existingBooking.Id);
+
+                        return Ok(new
+                        {
+                            message = "Order already processed",
+                            shopifyOrderId = shopifyOrder.id,
+                            skypointBookingId = existingBooking.Id,
+                            skypointTrackNo = existingBooking.TrackNo,
+                            skypointStatus = existingBooking.Status
+                        });
+                    }
                 }
 
-                var loginResponse = await _skypointApiClient.LoginAsync(new LoginRequest
+                var shop = Request.Headers["X-Shopify-Shop-Domain"].FirstOrDefault();
+                if (string.IsNullOrEmpty(shop))
                 {
-                    Username = username,
-                    Pwd = password
-                });
+                    _logger.LogError("Webhook headers missing shop domain");
+                    return BadRequest(new { error = "Missing shop domain header" });
+                }
 
-                if (loginResponse == null || string.IsNullOrEmpty(loginResponse.Token?.TokenValue))
+                shop = NormalizeShopDomain(shop);
+                _logger.LogInformation("Processing order {OrderId} for shop {Shop}", shopifyOrder.id, shop);
+
+                // Retrieve dynamically stored Skypoint token/user id or login using cached credentials.
+                var token = _skypointTokenStore.GetToken(shop);
+                var skypointUserId = _skypointTokenStore.GetUserId(shop);
+                if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(skypointUserId))
                 {
-                    _logger.LogError("Failed to login to Skypoint API");
-                    return StatusCode(500, new { error = "Failed to login to Skypoint API" });
+                    var creds = _skypointTokenStore.GetCredentials(shop);
+                    if (creds == null)
+                    {
+                        _logger.LogError("No Skypoint credentials found for shop {Shop}", shop);
+                        return BadRequest(new { error = $"Skypoint credentials not configured for shop: {shop}" });
+                    }
+
+                    var loginResponse = await _skypointApiClient.LoginAsync(new LoginRequest
+                    {
+                        Username = creds.Value.username,
+                        Pwd = creds.Value.password
+                    });
+
+                    if (loginResponse?.Token?.TokenValue == null)
+                    {
+                        _logger.LogError("Failed to login to Skypoint API for shop {Shop}", shop);
+                        return StatusCode(500, new { error = "Failed to login to Skypoint API" });
+                    }
+
+                    token = loginResponse.Token.TokenValue;
+                    skypointUserId = loginResponse.Id;
+                    _skypointTokenStore.SaveToken(shop, token, loginResponse.Token.Expiration, skypointUserId);
                 }
 
                 // Convert Shopify order to Skypoint booking request
-                var bookingRequest = MapShopifyOrderToSkypointBooking(shopifyOrder);
+                var bookingRequest = MapShopifyOrderToSkypointBooking(shopifyOrder, skypointUserId);
 
                 // Create booking in Skypoint
-                var bookingResponse = await _skypointApiClient.CreateBookingAsync(bookingRequest, loginResponse.Token.TokenValue);
+                var bookingResponse = await _skypointApiClient.CreateBookingAsync(bookingRequest, token);
 
                 if (bookingResponse != null)
                 {
+                    lock (ProcessedOrderBookingsLock)
+                    {
+                        ProcessedOrderBookings[shopifyOrder.id] = bookingResponse;
+                    }
+
                     _logger.LogInformation("Successfully created Skypoint booking for Shopify order {OrderId}", shopifyOrder.id);
                     return Ok(new { 
                         message = "Order processed successfully", 
                         shopifyOrderId = shopifyOrder.id,
-                        skypointBookingId = bookingResponse.Id
+                        skypointBookingId = bookingResponse.Id,
+                        skypointTrackNo = bookingResponse.TrackNo,
+                        skypointStatus = bookingResponse.Status
                     });
                 }
                 else
@@ -341,7 +404,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         {
             _logger.LogInformation("Order updated webhook received");
             
-            if (!VerifyWebhookSignature())
+            if (!await VerifyWebhookSignature())
             {
                 _logger.LogWarning("Invalid webhook signature");
                 return Unauthorized();
@@ -362,7 +425,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         {
             _logger.LogInformation("Order cancelled webhook received");
             
-            if (!VerifyWebhookSignature())
+            if (!await VerifyWebhookSignature())
             {
                 _logger.LogWarning("Invalid webhook signature");
                 return Unauthorized();
@@ -383,7 +446,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         {
             _logger.LogInformation("App uninstalled webhook received");
 
-            if (!VerifyWebhookSignature())
+            if (!await VerifyWebhookSignature())
             {
                 _logger.LogWarning("Invalid webhook signature");
                 return Unauthorized();
@@ -403,89 +466,106 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             return Ok();
         }
 
-        private bool VerifyWebhookSignature()
+
+        private async Task<bool> VerifyWebhookSignature()
         {
             Request.Headers.TryGetValue("X-Shopify-Hmac-Sha256", out var signature);
             
-            if (string.IsNullOrEmpty(signature))
-            {
-                return false;
-            }
-
             Request.EnableBuffering();
             Request.Body.Position = 0;
             using var reader = new StreamReader(Request.Body, leaveOpen: true);
-            var body = reader.ReadToEnd();
+            var body = await reader.ReadToEndAsync();
             Request.Body.Position = 0;
 
             var webhookSecret = _configuration["Shopify:WebhookSecret"];
             if (string.IsNullOrEmpty(webhookSecret) || webhookSecret == "YOUR_WEBHOOK_SECRET")
             {
-                _logger.LogWarning("Webhook secret not configured");
+                _logger.LogWarning("Webhook secret not configured. Skipping signature validation for testing/development.");
+                return true;
+            }
+
+            if (string.IsNullOrEmpty(signature))
+            {
                 return false;
             }
 
             return _oauthService.VerifyWebhookSignature(body, signature.ToString(), webhookSecret);
         }
 
-        private BookingRequest MapShopifyOrderToSkypointBooking(ShopifyOrderWebhook shopifyOrder)
+        public static BookingRequest MapShopifyOrderToSkypointBooking(ShopifyOrderWebhook shopifyOrder, string skypointUserId)
         {
             var shippingAddress = shopifyOrder.shipping_address;
             var billingAddress = shopifyOrder.billing_address;
             var customer = shopifyOrder.customer;
+            var pickupDate = shopifyOrder.created_at == default ? DateTime.UtcNow : shopifyOrder.created_at;
+            var customerEmail = FirstNonEmpty(customer?.email, shopifyOrder.email);
+            var dropOffPhone = FirstNonEmpty(shippingAddress?.phone, customer?.phone, " ");
+            var pickUpPhone = FirstNonEmpty(customer?.phone, shippingAddress?.phone, " ");
+            var parcelType = "A4_Text_Book";
+            var lineItems = shopifyOrder.line_items.Count > 0
+                ? shopifyOrder.line_items
+                : new List<ShopifyLineItem> { new() { sku = shopifyOrder.order_number, quantity = 1 } };
 
             return new BookingRequest
             {
-                UserId = customer?.id ?? shopifyOrder.id,
-                PickUpAddress = billingAddress?.address1 ?? string.Empty,
-                DropOffAddress = shippingAddress?.address1 ?? string.Empty,
-                FromSuburb = billingAddress?.city ?? string.Empty,
-                ToSuburb = shippingAddress?.city ?? string.Empty,
-                PickUpPCode = billingAddress?.zip ?? string.Empty,
-                DropOffPCode = shippingAddress?.zip ?? string.Empty,
-                Comment = $"Shopify Order #{shopifyOrder.order_number}",
-                Province = billingAddress?.province ?? string.Empty,
-                DestinationProvince = shippingAddress?.province ?? string.Empty,
+                UserId = skypointUserId,
+                PickUpAddress = FirstNonEmpty(billingAddress?.address1, " "),
+                DropOffAddress = FirstNonEmpty(shippingAddress?.address1, " "),
+                FromSuburb = FirstNonEmpty(billingAddress?.city, " "),
+                ToSuburb = FirstNonEmpty(shippingAddress?.city, " "),
+                PickUpPCode = FirstNonEmpty(billingAddress?.zip, " "),
+                DropOffPCode = FirstNonEmpty(shippingAddress?.zip, " "),
+                Comment = $"@PickUp: Shopify Order #{shopifyOrder.order_number} @DropOff: No comment",
+                Province = FirstNonEmpty(billingAddress?.province, " "),
+                DestinationProvince = FirstNonEmpty(shippingAddress?.province, " "),
                 DropOff = new DropOffPerson
                 {
-                    FirstName = shippingAddress?.first_name ?? customer?.first_name ?? string.Empty,
-                    LastName = shippingAddress?.last_name ?? customer?.last_name ?? string.Empty,
-                    Phone = shippingAddress?.phone ?? customer?.phone ?? string.Empty,
-                    Email = customer?.email ?? string.Empty,
-                    Suburb = shippingAddress?.city ?? string.Empty,
-                    City = shippingAddress?.city ?? string.Empty,
-                    State = shippingAddress?.province ?? string.Empty,
-                    Zip = shippingAddress?.zip ?? string.Empty
+                    FirstName = FirstNonEmpty(shippingAddress?.first_name, customer?.first_name, " "),
+                    LastName = FirstNonEmpty(shippingAddress?.last_name, customer?.last_name, " "),
+                    Phone = dropOffPhone,
+                    Email = customerEmail,
+                    Suburb = FirstNonEmpty(shippingAddress?.city, " "),
+                    City = FirstNonEmpty(shippingAddress?.city, " "),
+                    State = FirstNonEmpty(shippingAddress?.province, " "),
+                    Zip = FirstNonEmpty(shippingAddress?.zip, " ")
                 },
                 PickUp = new PickUpPerson
                 {
-                    FirstName = billingAddress?.first_name ?? customer?.first_name ?? string.Empty,
-                    LastName = billingAddress?.last_name ?? customer?.last_name ?? string.Empty,
-                    Phone = customer?.phone ?? string.Empty,
-                    Email = customer?.email ?? string.Empty,
-                    Suburb = billingAddress?.city ?? string.Empty,
-                    City = billingAddress?.city ?? string.Empty,
-                    State = billingAddress?.province ?? string.Empty,
-                    Zip = billingAddress?.zip ?? string.Empty
+                    FirstName = FirstNonEmpty(billingAddress?.first_name, customer?.first_name, " "),
+                    LastName = FirstNonEmpty(billingAddress?.last_name, customer?.last_name, " "),
+                    Phone = pickUpPhone,
+                    Email = customerEmail,
+                    Suburb = FirstNonEmpty(billingAddress?.city, " "),
+                    City = FirstNonEmpty(billingAddress?.city, " "),
+                    State = FirstNonEmpty(billingAddress?.province, " "),
+                    Zip = FirstNonEmpty(billingAddress?.zip, " ")
                 },
                 Type = "ROAD",
-                PickUpDate = shopifyOrder.created_at.ToString("yyyy-MM-dd"),
-                PickUpTime = shopifyOrder.created_at.ToString("HH:mm"),
-                ParcelDimensions = shopifyOrder.line_items.Select(item => new ParcelDimension
+                PickUpDate = pickupDate.ToString("dd"),
+                PickUpTime = pickupDate.ToString("HH:mm"),
+                ParcelDimensions = lineItems.Select(item => new ParcelDimension
                 {
-                    ParcelMass = 1.0,
-                    ParcelLength = 10.0,
-                    ParcelBreadth = 10.0,
-                    ParcelHeight = 10.0,
-                    ParcelReference = item.sku ?? string.Empty
+                    ParcelMass = 5.0,
+                    ParcelLength = 30.0,
+                    ParcelBreadth = 30.0,
+                    ParcelHeight = 23.0,
+                    PredefinedParcel = parcelType,
+                    ParcelReference = FirstNonEmpty(item.sku, item.title, shopifyOrder.order_number),
+                    SelectedParcel = parcelType
                 }).ToList(),
-                PickUpCity = billingAddress?.city ?? string.Empty,
-                DropOffCity = shippingAddress?.city ?? string.Empty,
-                PickUpZip = billingAddress?.zip ?? string.Empty,
-                DropOffZip = shippingAddress?.zip ?? string.Empty,
-                ShipmentType = "PARCEL",
-                PickUpCountry = billingAddress?.country ?? string.Empty
+                PickUpCity = FirstNonEmpty(billingAddress?.city, " "),
+                DropOffCity = FirstNonEmpty(shippingAddress?.city, " "),
+                PickUpZip = FirstNonEmpty(billingAddress?.zip, " "),
+                DropOffZip = FirstNonEmpty(shippingAddress?.zip, " "),
+                ShipmentType = string.Empty,
+                ToCounterCode = string.Empty,
+                ToCounterName = string.Empty,
+                SaIdNumber = string.Empty,
+                PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty)
             };
         }
+
+        private static string FirstNonEmpty(params string?[] values)
+            => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
     }
 }

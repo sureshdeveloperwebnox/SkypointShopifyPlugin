@@ -1,34 +1,34 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "1a36080eae7761c68616ba67c2b7ac7e"
-name = "SkyPoint"
-application_url = "https://0879-49-204-233-0.ngrok-free.app/index.html"
-embedded = true
+client_id = "43cc9e72087b61c72649cbabcd052072"
+name = "Skypoint Shipping"
+application_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev"
+embedded = false
 handle = "skypoint-shipping"
 
 [webhooks]
 api_version = "2026-04"
 
   [webhooks.privacy_compliance]
-  customer_deletion_url = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/customers/redact"
-  customer_data_request_url = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/customers/data_request"
-  shop_deletion_url = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/shop/redact"
+  customer_deletion_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/customers/redact"
+  customer_data_request_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/customers/data_request"
+  shop_deletion_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/shop/redact"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/create" ]
-  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/orders/create"
+  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/create"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/updated" ]
-  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/orders/updated"
+  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/updated"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/cancelled" ]
-  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/orders/cancelled"
+  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/cancelled"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
-  uri = "https://0879-49-204-233-0.ngrok-free.app/api/shopify/app/uninstalled"
+  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/app/uninstalled"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -37,4 +37,4 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://0879-49-204-233-0.ngrok-free.app/api/shopify/auth" ]
+redirect_urls = [ "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/auth" ]

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
 {
     public class BookingRequest
@@ -20,8 +22,13 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         public List<ParcelDimension> ParcelDimensions { get; set; } = new();
         public string PickUpCity { get; set; } = string.Empty;
         public string DropOffCity { get; set; } = string.Empty;
+
+        [JsonPropertyName("pickUpzip")]
         public string PickUpZip { get; set; } = string.Empty;
+
+        [JsonPropertyName("dropOffzip")]
         public string DropOffZip { get; set; } = string.Empty;
+
         public string ShipmentType { get; set; } = string.Empty;
         public string ToCounterCode { get; set; } = string.Empty;
         public string ToCounterName { get; set; } = string.Empty;

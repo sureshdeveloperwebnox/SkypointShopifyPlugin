@@ -11,10 +11,13 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         void SaveCredentials(string shopDomain, string username, string password);
 
         // Cache a token (after successful login)
-        void SaveToken(string shopDomain, string skypointToken, DateTime expiration);
+        void SaveToken(string shopDomain, string skypointToken, DateTime expiration, string? userId = null);
 
         // Get valid cached token, or null if expired/missing
         string? GetToken(string shopDomain);
+
+        // Get cached Skypoint user id, or null if token was not cached from a login response.
+        string? GetUserId(string shopDomain);
 
         // Get stored credentials for re-login when token expires
         (string username, string password)? GetCredentials(string shopDomain);

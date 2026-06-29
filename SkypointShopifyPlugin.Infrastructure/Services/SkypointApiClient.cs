@@ -100,20 +100,25 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         public async Task<BookingResponse> CreateBookingAsync(BookingRequest request, string authToken)
         {
             var url = _settings.GetBookingUrl();
-            _logger.LogInformation("Booking request to {Url}", url);
+            var payload = JsonSerializer.Serialize(request, _jsonOptions);
+            _logger.LogInformation("Booking request to {Url} | payload: {Payload}", url, payload);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
             httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
             httpRequest.Content = new StringContent(
-                JsonSerializer.Serialize(request, _jsonOptions),
+                payload,
                 Encoding.UTF8,
                 "application/json"
             );
 
             var response = await _httpClient.SendAsync(httpRequest);
-            response.EnsureSuccessStatusCode();
-
             var responseBody = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Booking API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                response.EnsureSuccessStatusCode();
+            }
+
             var result = JsonSerializer.Deserialize<BookingResponse>(responseBody, _jsonOptions);
             
             _logger.LogInformation("Booking created with tracking number: {TrackNo}", result?.TrackNo);
