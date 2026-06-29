@@ -2,14 +2,15 @@ namespace SkypointShopifyPlugin.Core.Configuration
 {
     /// <summary>
     /// Centralized configuration for Skypoint API integration
-    /// All API endpoints and settings are configured here for easy maintenance
+    /// All API endpoints and settings are configured via appsettings.json or environment variables
+    /// Default values provided for development - should be overridden in production
     /// </summary>
     public class SkypointApiSettings
     {
         public const string SectionName = "SkypointApi";
-        
+
         /// <summary>
-        /// Base URL for Skypoint API
+        /// Base URL for Skypoint API (defaults to UAT environment)
         /// </summary>
         public string BaseUrl { get; set; } = "https://uat.skypoint.online";
 
@@ -34,19 +35,14 @@ namespace SkypointShopifyPlugin.Core.Configuration
         public string BookingEndpoint { get; set; } = "/api/service/booking/create";
 
         /// <summary>
-        /// Request timeout in seconds
+        /// Request timeout in seconds (optional - defaults to 30)
         /// </summary>
         public int TimeoutSeconds { get; set; } = 30;
 
         /// <summary>
-        /// Maximum retry attempts for failed requests
+        /// Maximum retry attempts for failed requests (optional - defaults to 3)
         /// </summary>
         public int MaxRetryAttempts { get; set; } = 3;
-
-        /// <summary>
-        /// Default predefined parcel type for rate requests
-        /// </summary>
-        public string DefaultParcelType { get; set; } = "A4_Text_Book";
 
         /// <summary>
         /// Gets the full login URL

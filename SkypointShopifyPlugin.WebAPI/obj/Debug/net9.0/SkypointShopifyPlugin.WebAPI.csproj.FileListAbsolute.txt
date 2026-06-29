@@ -68,7 +68,6 @@ D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\ne
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\publish\SkypointShopifyPlugin.WebAPI.staticwebassets.endpoints.json
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\SkypointShopifyPlugin.WebAPI.staticwebassets.runtime.json
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\4yxshy24r4-jga20l07vt.gz
-D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\7z0ovqllzv-y1x10h7w6k.gz
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\Microsoft.Data.Sqlite.dll
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\Microsoft.EntityFrameworkCore.dll
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\Microsoft.EntityFrameworkCore.Abstractions.dll
@@ -107,3 +106,5 @@ D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\ne
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\y0sh98z9gf-7klqzssyjz.gz
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\b72637evvf-1bh5vvujxf.gz
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\shopify_tokens.json
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\app_config.json
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\7z0ovqllzv-w32p6olbh2.gz

@@ -59,6 +59,12 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
             // Skypoint order service — handles order creation, processing, and management.
             services.AddScoped<ISkypointOrderService, SkypointOrderService>();
 
+            // Configuration store — persists app configuration to disk.
+            services.AddSingleton<IConfigurationStore, ConfigurationStore>();
+
+            // On startup: loads saved configuration from app_config.json
+            services.AddHostedService<ConfigurationBootstrapService>();
+
             // On startup: re-authenticates every known shop from persisted credentials.
             // No hardcoded values — scales to any number of shops automatically.
             services.AddHostedService<SkypointTokenBootstrapService>();
