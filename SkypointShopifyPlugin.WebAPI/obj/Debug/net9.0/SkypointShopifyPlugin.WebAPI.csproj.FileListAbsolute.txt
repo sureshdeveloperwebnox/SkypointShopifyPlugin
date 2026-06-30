@@ -108,8 +108,10 @@ d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\ne
 d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\xyyqwoqkon-o2wlpouf80.gz
 d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\yc0ozwvfpi-kao5znno1s.gz
 d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\xr89xsvobu-7ypck5vpmh.gz
-d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\b72637evvf-8ulrj494ud.gz
-d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\bsahe8v9lg-ek4bne4psn.gz
 d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\4yxshy24r4-ks5ys3qyj2.gz
-d:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\7z0ovqllzv-uso4t7msgn.gz
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\y0sh98z9gf-7ul81a4996.gz
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\shop_tokens.json
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\ufdejzvgwc-1r05b29qk5.gz
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\b72637evvf-wi6y02tzqr.gz
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\bsahe8v9lg-usnmgxy4cu.gz
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\obj\Debug\net9.0\compressed\7z0ovqllzv-yiarxwrgid.gz

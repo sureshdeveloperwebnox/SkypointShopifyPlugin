@@ -100,11 +100,15 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 {
                     var (existingId, existingCallbackUrl) = existing.Value;
 
-                    // If the callback URL is already correct — nothing to do
+                    // If the callback URL is already correct — make sure it's assigned to all zones
                     if (existingCallbackUrl.Equals(carrierServiceUrl, StringComparison.OrdinalIgnoreCase))
                     {
-                        _logger.LogInformation("Carrier (id={Id}) callback URL already up-to-date", existingId);
-                        return (true, $"Skypoint Shipping already registered (id={existingId})");
+                        _logger.LogInformation("Carrier (id={Id}) callback URL already up-to-date. Checking zone assignments...", existingId);
+                        var assigned = await AssignCarrierToAllZonesAsync(shopDomain, accessToken, existingId);
+                        var zoneMsg = assigned > 0
+                            ? $" Added to {assigned} shipping zone(s) automatically."
+                            : " Checked zone assignments.";
+                        return (true, $"Skypoint Shipping already registered (id={existingId}).{zoneMsg}");
                     }
 
                     // Try to update the callback URL
@@ -112,7 +116,13 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                         existingId, existingCallbackUrl, carrierServiceUrl);
                     var updated = await UpdateCarrierCallbackAsync(shopDomain, accessToken, existingId, carrierServiceUrl);
                     if (updated)
-                        return (true, $"Skypoint Shipping callback URL updated (id={existingId})");
+                    {
+                        var assigned = await AssignCarrierToAllZonesAsync(shopDomain, accessToken, existingId);
+                        var zoneMsg = assigned > 0
+                            ? $" Added to {assigned} shipping zone(s) automatically."
+                            : " Checked zone assignments.";
+                        return (true, $"Skypoint Shipping callback URL updated (id={existingId}).{zoneMsg}");
+                    }
 
                     // 403 — current token doesn't own this carrier (created by a different app/token).
                     // Delete it and recreate under the current token so ownership is correct.
