@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using SkypointShopifyPlugin.Core.DTOs.Shopify;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.WebAPI.Controllers;
@@ -14,12 +15,12 @@ namespace SkypointShopifyPlugin.Tests
             // Arrange
             var shopifyOrder = new ShopifyOrderWebhook
             {
-                id = "cc45a1fc-38ef-4cb3-a889-84ddbb5ef7b5",
-                order_number = "108726",
+                id = 123456789L,
+                order_number = 108726L,
                 created_at = new DateTime(2026, 6, 26, 13, 11, 0, DateTimeKind.Utc),
                 customer = new ShopifyCustomer
                 {
-                    id = "cc45a1fc-38ef-4cb3-a889-84ddbb5ef7b5",
+                    id = 987654321L,
                     first_name = "Swaathi",
                     last_name = "Mano",
                     phone = "0979013425",
@@ -52,13 +53,21 @@ namespace SkypointShopifyPlugin.Tests
                     {
                         sku = "A4_Text_Book",
                         quantity = 1,
-                        price = "105.00"
+                        price = 105.00m
                     }
                 }
             };
 
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    { "Skypoint:SuburbMappings:BLOEMFONTEIN", "BLOEMFONTEIN" },
+                    { "Skypoint:SuburbMappings:GERMISTON", "GERMISTON" }
+                })
+                .Build();
+
             // Act
-            var bookingRequest = ShopifyController.MapShopifyOrderToSkypointBooking(shopifyOrder, "cc45a1fc-38ef-4cb3-a889-84ddbb5ef7b5");
+            var bookingRequest = ShopifyController.MapShopifyOrderToSkypointBooking(shopifyOrder, "cc45a1fc-38ef-4cb3-a889-84ddbb5ef7b5", configuration);
 
             // Assert
             Assert.Equal("cc45a1fc-38ef-4cb3-a889-84ddbb5ef7b5", bookingRequest.UserId);

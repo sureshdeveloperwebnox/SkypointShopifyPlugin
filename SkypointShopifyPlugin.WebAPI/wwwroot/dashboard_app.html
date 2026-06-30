@@ -132,10 +132,10 @@
             text-decoration: none;
         }
 
-        .btn-logout {
-            color: #ffffff;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.15);
+        .btn-navbar {
+            color: #333333;
+            background: transparent;
+            border: 1px solid #cccccc;
             border-radius: 6px;
             padding: 0.5rem 1.25rem;
             font-weight: 700;
@@ -143,12 +143,20 @@
             cursor: pointer;
             transition: all 0.3s ease;
             text-decoration: none;
+            display: inline-block;
         }
 
-        .btn-logout:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.3);
-            color: #ffffff;
+        .btn-navbar:hover {
+            color: #ff1e27;
+            border-color: #ff1e27;
+            background: rgba(255, 30, 39, 0.05);
+            text-decoration: none;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
     </style>
 </head>
@@ -171,8 +179,9 @@
                         <path d="M 5 35 L 122 35" stroke="#ff1e27" stroke-width="1.5" />
                     </svg>
                 </a>
-                <div>
-                    <button onclick="logout()" class="btn-logout">Logout</button>
+                <div class="navbar-links">
+                    <a id="configLink" class="btn-navbar">Configuration</a>
+                    <button onclick="logout()" class="btn-navbar">Logout</button>
                 </div>
             </div>
         </nav>
@@ -229,6 +238,8 @@
                 : 'login.html';
         } else {
             if (shop) sessionStorage.setItem('skypoint_shop', shop);
+            // Set up configuration link href
+            document.getElementById('configLink').href = shop ? 'setup.html?shop=' + encodeURIComponent(shop) : 'setup.html';
             init();
         }
 

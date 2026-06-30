@@ -71,7 +71,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         public IActionResult Default(string shop)
         {
             if (string.IsNullOrEmpty(shop))
-                return Redirect("/index.html");
+                return Redirect($"/login.html?v={DateTime.UtcNow.Ticks}");
 
             shop = NormalizeShopDomain(shop);
             _logger.LogInformation("Install request from shop: {Shop}", shop);
@@ -145,7 +145,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 });
 
                 // Redirect to app UI
-                return Redirect($"/index.html?shop={Uri.EscapeDataString(shop)}");
+                return Redirect($"/login.html?shop={Uri.EscapeDataString(shop)}&v={DateTime.UtcNow.Ticks}");
             }
             catch (Exception ex)
             {

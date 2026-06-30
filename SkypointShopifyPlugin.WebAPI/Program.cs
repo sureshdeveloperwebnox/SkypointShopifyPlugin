@@ -65,7 +65,18 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 
 app.UseCors("AllowAll");
 // app.UseHttpsRedirection(); // Disabled for ngrok tunnel compatibility
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+            ctx.Context.Response.Headers.Append("Pragma", "no-cache");
+            ctx.Context.Response.Headers.Append("Expires", "0");
+        }
+    }
+});
 app.UseAuthorization();
 app.MapControllers();
 
