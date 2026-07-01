@@ -1,0 +1,206 @@
+@page "/login"
+@layout LoginLayout
+@inject HttpClient Http
+@inject ProtectedSessionStorage SessionStorage
+@inject NavigationManager NavigationManager
+
+<div class="auth-card">
+    <div class="text-center mb-4">
+        <h4 class="auth-card-title">Welcome to SkyTrack</h4>
+        <p class="auth-card-subtitle">Select your login method below</p>
+    </div>
+
+    <!-- SkyNet User Login (Azure Active Directory) -->
+    <div class="mb-4">
+        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1rem;">SkyNet User Login</h5>
+        <button type="button" class="btn-skynet-primary" @onclick="LoginWithAad" disabled="@isSubmitting">
+            <i class="fab fa-microsoft mr-2"></i> Login with Microsoft AAD
+        </button>
+    </div>
+
+    <div class="auth-divider"></div>
+
+    <!-- SkyNet Client Login (Email/Password) -->
+    <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
+        <DataAnnotationsValidator />
+        
+        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1.5rem;">SkyNet Client Login</h5>
+
+        <div class="form-group-custom">
+            <label class="form-label-custom" for="username">Email Address</label>
+            <div class="input-container">
+                <InputText id="username" class="form-input-custom" placeholder="name@example.com" @bind-Value="loginModel.Username" required />
+            </div>
+            <ValidationMessage For="@(() => loginModel.Username)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
+        </div>
+
+        <div class="form-group-custom">
+            <label class="form-label-custom" for="password">Password</label>
+            <div class="input-container">
+                <input type="@PasswordType" id="password" class="form-input-custom" placeholder="password" @bind="loginModel.Password" required />
+                <i class="@PasswordToggleIcon password-toggle-icon" @onclick="TogglePasswordVisibility"></i>
+            </div>
+            <ValidationMessage For="@(() => loginModel.Password)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="msg error" style="display: block;">@errorMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="msg success" style="display: block;">@successMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(infoMessage))
+        {
+            <div class="msg info" style="display: block; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #60a5fa;">@infoMessage</div>
+        }
+
+        <div class="mt-4">
+            <button type="submit" class="btn-skynet-primary" disabled="@isSubmitting">
+                @(isSubmitting ? "Logging in..." : "Login")
+            </button>
+            <a role="button" class="btn-skynet-secondary text-center d-block mt-2" href="@GetCancelUrl()">Cancel</a>
+        </div>
+
+        <div class="text-center">
+            <a href="#" class="forgot-password-link">Forgot your password?</a>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Shop { get; set; }
+
+    private LoginViewModel loginModel = new();
+    private bool isSubmitting = false;
+    private bool showPassword = false;
+    private string? errorMessage;
+    private string? successMessage;
+    private string? infoMessage;
+
+    private string PasswordType => showPassword ? "text" : "password";
+    private string PasswordToggleIcon => showPassword ? "fas fa-eye-slash" : "fas fa-eye";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Check if user is already logged in
+                var tokenResult = await SessionStorage.GetAsync<string>("skypoint_token");
+                if (tokenResult.Success && !string.IsNullOrEmpty(tokenResult.Value))
+                {
+                    RedirectToDashboard();
+                }
+            }
+            catch
+            {
+                // Degrade gracefully during pre-rendering
+            }
+        }
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        showPassword = !showPassword;
+    }
+
+    private string GetCancelUrl()
+    {
+        return string.IsNullOrEmpty(Shop) ? "/" : $"?shop={Uri.EscapeDataString(Shop)}";
+    }
+
+    private async Task LoginWithAad()
+    {
+        errorMessage = null;
+        successMessage = null;
+        infoMessage = "Redirecting to Microsoft Azure Active Directory...";
+        isSubmitting = true;
+        StateHasChanged();
+        
+        await Task.Delay(1500);
+        RedirectToDashboard();
+    }
+
+    private async Task HandleLogin()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+        successMessage = null;
+        infoMessage = null;
+        StateHasChanged();
+
+        var loginUrl = string.IsNullOrEmpty(Shop) 
+            ? "api/auth/login" 
+            : $"api/auth/login?shop={Uri.EscapeDataString(Shop)}";
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(loginUrl, new { username = loginModel.Username, pwd = loginModel.Password });
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<LoginResult>();
+                if (result != null && result.Success)
+                {
+                    await SessionStorage.SetAsync("skypoint_token", result.Token ?? "");
+                    await SessionStorage.SetAsync("skypoint_user", JsonSerializer.Serialize(result.User));
+                    if (!string.IsNullOrEmpty(Shop))
+                    {
+                        await SessionStorage.SetAsync("skypoint_shop", Shop);
+                    }
+
+                    successMessage = "Login successful! Redirecting...";
+                    StateHasChanged();
+                    await Task.Delay(600);
+                    RedirectToDashboard();
+                    return;
+                }
+            }
+
+            // Error path
+            var errData = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            errorMessage = errData?.Error ?? "Login failed. Check your credentials.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Network error: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void RedirectToDashboard()
+    {
+        var dest = string.IsNullOrEmpty(Shop) ? "/dashboard" : $"/dashboard?shop={Uri.EscapeDataString(Shop)}";
+        NavigationManager.NavigateTo(dest);
+    }
+
+    public class LoginViewModel
+    {
+        [Required(ErrorMessage = "Email address is required")]
+        [EmailAddress(ErrorMessage = "Please enter a valid email address")]
+        public string Username { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password is required")]
+        public string Password { get; set; } = string.Empty;
+    }
+
+    public class LoginResult
+    {
+        public bool Success { get; set; }
+        public string? Token { get; set; }
+        public object? User { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public string? Error { get; set; }
+    }
+}

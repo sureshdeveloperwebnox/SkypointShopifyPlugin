@@ -1,0 +1,41 @@
+@page "/"
+@inject ProtectedSessionStorage SessionStorage
+@inject NavigationManager NavigationManager
+
+<div class="text-center py-5" style="color: #ffffff;">
+    <i class="fas fa-spinner fa-spin mr-2" style="font-size: 1.5rem; color: #ff1e27;"></i> Redirecting...
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Shop { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(Shop))
+                {
+                    NavigationManager.NavigateTo($"/login?shop={Uri.EscapeDataString(Shop)}");
+                    return;
+                }
+
+                var tokenResult = await SessionStorage.GetAsync<string>("skypoint_token");
+                if (tokenResult.Success && !string.IsNullOrEmpty(tokenResult.Value))
+                {
+                    NavigationManager.NavigateTo("/dashboard");
+                }
+                else
+                {
+                    NavigationManager.NavigateTo("/login");
+                }
+            }
+            catch
+            {
+                // Degrade gracefully during pre-rendering
+            }
+        }
+    }
+}

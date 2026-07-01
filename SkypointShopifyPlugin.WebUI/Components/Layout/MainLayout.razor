@@ -1,0 +1,97 @@
+@inherits LayoutComponentBase
+@inject ProtectedSessionStorage SessionStorage
+@inject NavigationManager NavigationManager
+
+<div class="auth-layout" style="background-image: linear-gradient(rgba(11, 15, 25, 0.8), rgba(11, 15, 25, 0.85)), url('images/skynet_bg.jpg'); background-size: cover; background-position: center; background-repeat: no-repeat; min-height: 100vh;">
+    <!-- Top Navbar -->
+    <nav class="navbar auth-navbar">
+        <div class="navbar-container">
+            <a class="navbar-brand" href="/">
+                <svg viewBox="0 0 220 50" width="180" height="40" style="vertical-align: middle;">
+                    <defs>
+                        <linearGradient id="skynet-red" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#ff1e27" />
+                            <stop offset="100%" stop-color="#d30008" />
+                        </linearGradient>
+                    </defs>
+                    <text x="5" y="32" font-family="'Impact', 'Arial Black', sans-serif" font-weight="900" font-style="italic" font-size="30" fill="url(#skynet-red)" letter-spacing="-1">SKYNET</text>
+                    <text x="7" y="44" font-family="'Arial', sans-serif" font-weight="800" font-size="7.5" fill="#111111" letter-spacing="2.2">WORLDWIDE EXPRESS</text>
+                    <path d="M 5 35 L 122 35" stroke="#ff1e27" stroke-width="1.5" />
+                </svg>
+            </a>
+            <div class="navbar-links">
+                @if (isLoaded)
+                {
+                    @if (!string.IsNullOrEmpty(token))
+                    {
+                        <a href="@GetLink("/setup")" class="nav-link-btn @(IsActive("/setup") ? "active" : "")">Configuration</a>
+                        <a href="@GetLink("/dashboard")" class="nav-link-btn @(IsActive("/dashboard") ? "active" : "")">Dashboard</a>
+                        <button @onclick="Logout" class="nav-link-btn" style="border: 1px solid rgba(255,255,255,0.15); background: transparent; color: #333;">Logout</button>
+                    }
+                    else
+                    {
+                        <a href="@GetLink("/register")" class="nav-link-btn @(IsActive("/register") ? "active" : "")">Register</a>
+                        <a href="@GetLink("/login")" class="nav-link-btn @(IsActive("/login") ? "active" : "")">Login</a>
+                    }
+                }
+            </div>
+        </div>
+    </nav>
+
+    <!-- Page Content -->
+    @Body
+</div>
+
+@code {
+    private bool isLoaded = false;
+    private string? token;
+    private string? userJson;
+    private string? shop;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var tokenResult = await SessionStorage.GetAsync<string>("skypoint_token");
+                token = tokenResult.Success ? tokenResult.Value : null;
+
+                var userResult = await SessionStorage.GetAsync<string>("skypoint_user");
+                userJson = userResult.Success ? userResult.Value : null;
+
+                var shopResult = await SessionStorage.GetAsync<string>("skypoint_shop");
+                shop = shopResult.Success ? shopResult.Value : null;
+
+                isLoaded = true;
+                StateHasChanged();
+            }
+            catch
+            {
+                // In pre-rendering or if session storage fails, just degrade gracefully
+            }
+        }
+    }
+
+    private bool IsActive(string path)
+    {
+        var uri = new Uri(NavigationManager.Uri);
+        return uri.AbsolutePath.Equals(path, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string GetLink(string path)
+    {
+        return string.IsNullOrEmpty(shop) ? path : $"{path}?shop={Uri.EscapeDataString(shop)}";
+    }
+
+    private async Task Logout()
+    {
+        await SessionStorage.DeleteAsync("skypoint_token");
+        await SessionStorage.DeleteAsync("skypoint_user");
+        token = null;
+        userJson = null;
+        
+        var redirectUrl = string.IsNullOrEmpty(shop) ? "/login" : $"/login?shop={Uri.EscapeDataString(shop)}";
+        NavigationManager.NavigateTo(redirectUrl, forceLoad: true);
+    }
+}

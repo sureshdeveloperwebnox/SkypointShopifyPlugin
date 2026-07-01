@@ -1,0 +1,220 @@
+@page "/setup"
+@inject HttpClient Http
+@inject ProtectedSessionStorage SessionStorage
+@inject NavigationManager NavigationManager
+
+<div class="auth-content" style="background-image: linear-gradient(rgba(11, 15, 25, 0.8), rgba(11, 15, 25, 0.85)), url('images/skynet_bg.jpg'); background-size: cover; background-position: center; background-repeat: no-repeat; width: 100%; min-height: calc(100vh - 65px); display: flex; justify-content: center; align-items: center; padding: 2rem 0;">
+    <div class="auth-card" style="max-width: 800px; width: 90%; max-height: 85vh; overflow-y: auto; margin: auto;">
+        <div class="text-center mb-4">
+            <h4 class="auth-card-title">Centralized Configuration</h4>
+            <p class="auth-card-subtitle">Set up your Shopify and Skypoint API credentials</p>
+        </div>
+
+        @if (!isLoaded)
+        {
+            <div class="text-center py-4" style="color: #cbd5e1;">
+                <i class="fas fa-spinner fa-spin mr-2"></i> Loading configuration...
+            </div>
+        }
+        else
+        {
+            <EditForm Model="@config" OnValidSubmit="SaveConfiguration">
+                <!-- Shopify Configuration -->
+                <div class="section-title-custom form-label-custom" style="font-size: 1rem; border-bottom: 1px solid rgba(255, 30, 39, 0.3); padding-bottom: 5px; margin-bottom: 15px; color: #ff1e27;">Shopify Configuration</div>
+                <div class="row">
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="shopifyClientId">Client ID</label>
+                        <div class="input-container">
+                            <InputText id="shopifyClientId" class="form-input-custom" placeholder="Shopify Client ID" @bind-Value="config.Shopify.ClientId" required />
+                        </div>
+                    </div>
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="shopifyClientSecret">Client Secret</label>
+                        <div class="input-container">
+                            <input type="password" id="shopifyClientSecret" class="form-input-custom" placeholder="Shopify Client Secret" @bind="config.Shopify.ClientSecret" required />
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="shopifyRedirectUri">Redirect URI</label>
+                        <div class="input-container">
+                            <InputText id="shopifyRedirectUri" class="form-input-custom" placeholder="https://.../api/shopify/auth" @bind-Value="config.Shopify.RedirectUri" required />
+                        </div>
+                    </div>
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="shopifyWebhookSecret">Webhook Secret</label>
+                        <div class="input-container">
+                            <input type="password" id="shopifyWebhookSecret" class="form-input-custom" placeholder="Shopify Webhook Secret" @bind="config.Shopify.WebhookSecret" required />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Skypoint API Configuration -->
+                <div class="section-divider" style="border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 1.5rem 0; padding-top: 1rem;"></div>
+                <div class="section-title-custom form-label-custom" style="font-size: 1rem; border-bottom: 1px solid rgba(255, 30, 39, 0.3); padding-bottom: 5px; margin-bottom: 15px; color: #ff1e27;">Skypoint API Configuration</div>
+                <div class="row">
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="skypointBaseUrl">Base URL</label>
+                        <div class="input-container">
+                            <InputText id="skypointBaseUrl" class="form-input-custom" placeholder="https://uat.skypoint.online" @bind-Value="config.SkypointApi.BaseUrl" required />
+                        </div>
+                    </div>
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="skypointLoginEndpoint">Login Endpoint</label>
+                        <div class="input-container">
+                            <InputText id="skypointLoginEndpoint" class="form-input-custom" placeholder="/api/.../login" @bind-Value="config.SkypointApi.LoginEndpoint" required />
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="skypointRateEndpoint">Rate Endpoint</label>
+                        <div class="input-container">
+                            <InputText id="skypointRateEndpoint" class="form-input-custom" placeholder="/api/.../quote" @bind-Value="config.SkypointApi.RateEndpoint" required />
+                        </div>
+                    </div>
+                    <div class="col-md-6 form-group-custom">
+                        <label class="form-label-custom" for="skypointBookingEndpoint">Booking Endpoint</label>
+                        <div class="input-container">
+                            <InputText id="skypointBookingEndpoint" class="form-input-custom" placeholder="/api/.../create" @bind-Value="config.SkypointApi.BookingEndpoint" required />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parcel Dimensions -->
+                <div class="section-divider" style="border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 1.5rem 0; padding-top: 1rem;"></div>
+                <div class="section-title-custom form-label-custom" style="font-size: 1rem; border-bottom: 1px solid rgba(255, 30, 39, 0.3); padding-bottom: 5px; margin-bottom: 15px; color: #ff1e27;">Default Parcel Dimensions</div>
+                <div class="row">
+                    <div class="col-md-3 col-6 form-group-custom">
+                        <label class="form-label-custom" for="parcelLength">Length (cm)</label>
+                        <div class="input-container">
+                            <InputNumber id="parcelLength" class="form-input-custom" placeholder="10.0" @bind-Value="config.SkypointMappings.DefaultParcelLength" required />
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 form-group-custom">
+                        <label class="form-label-custom" for="parcelBreadth">Breadth (cm)</label>
+                        <div class="input-container">
+                            <InputNumber id="parcelBreadth" class="form-input-custom" placeholder="10.0" @bind-Value="config.SkypointMappings.DefaultParcelBreadth" required />
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 form-group-custom">
+                        <label class="form-label-custom" for="parcelHeight">Height (cm)</label>
+                        <div class="input-container">
+                            <InputNumber id="parcelHeight" class="form-input-custom" placeholder="10.0" @bind-Value="config.SkypointMappings.DefaultParcelHeight" required />
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6 form-group-custom">
+                        <label class="form-label-custom" for="parcelMass">Mass (kg)</label>
+                        <div class="input-container">
+                            <InputNumber id="parcelMass" class="form-input-custom" placeholder="0.5" @bind-Value="config.SkypointMappings.DefaultParcelMass" required />
+                        </div>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="msg success" style="display: block;">
+                        <strong>✓ Configuration Saved Successfully!</strong><br>
+                        @successMessage
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="msg error" style="display: block;">@errorMessage</div>
+                }
+
+                <div class="mt-4">
+                    <button type="submit" class="btn-skynet-primary" disabled="@isSaving">
+                        @(isSaving ? "Saving..." : "Save Configuration")
+                    </button>
+                </div>
+            </EditForm>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Shop { get; set; }
+
+    private AppConfiguration config = new();
+    private bool isLoaded = false;
+    private bool isSaving = false;
+    private string? successMessage;
+    private string? errorMessage;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // Authenticate check
+                var tokenResult = await SessionStorage.GetAsync<string>("skypoint_token");
+                if (!tokenResult.Success || string.IsNullOrEmpty(tokenResult.Value))
+                {
+                    var redirectUrl = string.IsNullOrEmpty(Shop) ? "/login" : $"/login?shop={Uri.EscapeDataString(Shop)}";
+                    NavigationManager.NavigateTo(redirectUrl);
+                    return;
+                }
+
+                await LoadConfiguration();
+            }
+            catch
+            {
+                // Graceful degradation during pre-render
+            }
+        }
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<AppConfiguration>("api/configuration");
+            if (res != null)
+            {
+                config = res;
+            }
+            isLoaded = true;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load configuration: {ex.Message}";
+            isLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveConfiguration()
+    {
+        isSaving = true;
+        successMessage = null;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/configuration", config);
+            if (response.IsSuccessStatusCode)
+            {
+                successMessage = "Your configuration has been saved to data/app_config.json. You can now restart the application to apply the changes.";
+            }
+            else
+            {
+                errorMessage = "Failed to save configuration. Server returned error.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Network error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+}

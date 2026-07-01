@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkypointShopifyPlugin.WebAP
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkypointShopifyPlugin.Tests", "SkypointShopifyPlugin.Tests\SkypointShopifyPlugin.Tests.csproj", "{9FA3C789-5421-4B9E-AF7A-58A1FAD2D9D1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkypointShopifyPlugin.WebUI", "SkypointShopifyPlugin.WebUI\SkypointShopifyPlugin.WebUI.csproj", "{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -69,6 +71,18 @@ Global
 		{9FA3C789-5421-4B9E-AF7A-58A1FAD2D9D1}.Release|x64.Build.0 = Release|Any CPU
 		{9FA3C789-5421-4B9E-AF7A-58A1FAD2D9D1}.Release|x86.ActiveCfg = Release|Any CPU
 		{9FA3C789-5421-4B9E-AF7A-58A1FAD2D9D1}.Release|x86.Build.0 = Release|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Debug|x64.Build.0 = Debug|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Debug|x86.Build.0 = Debug|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Release|x64.ActiveCfg = Release|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Release|x64.Build.0 = Release|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Release|x86.ActiveCfg = Release|Any CPU
+		{2C22A4B3-F61D-4F6D-A480-6BB414EAEA10}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
