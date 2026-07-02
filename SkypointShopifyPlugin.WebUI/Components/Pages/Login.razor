@@ -113,16 +113,11 @@
         return string.IsNullOrEmpty(Shop) ? "/" : $"?shop={Uri.EscapeDataString(Shop)}";
     }
 
-    private async Task LoginWithAad()
+    private void LoginWithAad()
     {
-        errorMessage = null;
+        errorMessage = "Microsoft AAD authentication is currently under development. Please log in using your SkyNet Client email and password below.";
         successMessage = null;
-        infoMessage = "Redirecting to Microsoft Azure Active Directory...";
-        isSubmitting = true;
-        StateHasChanged();
-        
-        await Task.Delay(1500);
-        RedirectToDashboard();
+        infoMessage = null;
     }
 
     private async Task HandleLogin()

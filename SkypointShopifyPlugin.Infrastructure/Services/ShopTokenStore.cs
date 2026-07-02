@@ -1,268 +1,247 @@
-using System.Collections.Concurrent;
-using System.Security.Cryptography;
-using System.Text;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SkypointShopifyPlugin.Core.Interfaces;
+using SkypointShopifyPlugin.Infrastructure.Data;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
-    /// <summary>
-    /// Options — DataDirectory is injected by the WebAPI host (ContentRootPath/data).
-    /// Shared with SkypointCredentialStore so all secrets land in the same folder.
-    /// </summary>
     public class ShopTokenStoreOptions
     {
-        public string DataDirectory { get; set; } =
-            Path.Combine(AppContext.BaseDirectory, "data");
+        public string DataDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "data");
     }
 
     /// <summary>
-    /// Shopify OAuth token store.
-    ///
-    /// Strategy:
-    ///   - In-memory ConcurrentDictionary for fast reads on every carrier rate request.
-    ///   - AES-GCM encrypted JSON file for persistence across server restarts.
-    ///   - Shares the same 256-bit key file (skypoint_key.bin) as SkypointCredentialStore
-    ///     — one key manages all server-side secrets.
-    ///
-    /// Token lifecycle:
-    ///   1. OAuth callback completes → SaveToken() → written to disk immediately
-    ///   2. Server restarts → Load() reads + decrypts file → memory warmed on startup
-    ///   3. Token rejected by Shopify → RemoveToken() → removed from disk
-    ///   4. Merchant uninstalls app → RemoveToken() via webhook
-    ///
-    /// Nothing is ever sent to the browser. The token lives server-side only.
+    /// Database-backed Shopify OAuth token store.
+    /// Provides stateless token persistence across server instances.
+    /// Includes a one-time migration for legacy file-based tokens.
     /// </summary>
     public class ShopTokenStore : IShopTokenStore
     {
-        private record TokenRecord(string EncryptedToken, string IV);
-
-        private readonly ConcurrentDictionary<string, string> _cache =
-            new(StringComparer.OrdinalIgnoreCase);
-
-        private readonly ConcurrentDictionary<string, TokenRecord> _store =
-            new(StringComparer.OrdinalIgnoreCase);
-
-        private readonly string _tokenFile;
-        private readonly string _keyFile;
-        private readonly byte[] _encryptionKey;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IEncryptionService _encryptionService;
         private readonly ILogger<ShopTokenStore> _logger;
-        private readonly object _writeLock = new();
+        private readonly string _dataDirectory;
 
         public ShopTokenStore(
+            IServiceScopeFactory scopeFactory,
+            IEncryptionService encryptionService,
             IOptions<ShopTokenStoreOptions> options,
             ILogger<ShopTokenStore> logger)
         {
+            _scopeFactory = scopeFactory;
+            _encryptionService = encryptionService;
             _logger = logger;
+            _dataDirectory = options.Value.DataDirectory;
 
-            var dir = options.Value.DataDirectory;
-            Directory.CreateDirectory(dir);
-
-            _tokenFile = Path.Combine(dir, "shopify_tokens.json");
-            // Reuse the same key file as SkypointCredentialStore
-            _keyFile = Path.Combine(dir, "skypoint_key.bin");
-
-            _encryptionKey = LoadOrCreateKey();
-            LoadFromDisk();
-
-            // One-time migration: import plain-text tokens from the old shop_tokens.json
-            // format so existing shops don't need to reinstall the app.
-            MigrateFromLegacyFile(Path.Combine(dir, "shop_tokens.json"));
-
-            _logger.LogInformation(
-                "ShopTokenStore loaded {Count} Shopify token(s) from {Path}",
-                _cache.Count, _tokenFile);
+            // Perform one-time migration from file-based storage on startup
+            MigrateLegacyFiles();
         }
-
-        // ── IShopTokenStore ──────────────────────────────────────────────────────
 
         public void SaveToken(string shopDomain, string accessToken)
         {
             shopDomain = Normalize(shopDomain);
-            var (enc, iv) = Encrypt(accessToken);
-            _store[shopDomain] = new TokenRecord(enc, iv);
-            _cache[shopDomain] = accessToken;
-            Persist();
-            _logger.LogInformation("Shopify token saved for shop: {Shop}", shopDomain);
+            var (encToken, iv) = _encryptionService.Encrypt(accessToken);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.ShopifyTokens.FirstOrDefault(t => t.ShopDomain == shopDomain);
+            if (entity == null)
+            {
+                entity = new ShopifyTokenEntity
+                {
+                    ShopDomain = shopDomain,
+                    EncryptedToken = encToken,
+                    Iv = iv,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                db.ShopifyTokens.Add(entity);
+            }
+            else
+            {
+                entity.EncryptedToken = encToken;
+                entity.Iv = iv;
+                entity.UpdatedAt = DateTime.UtcNow;
+                db.ShopifyTokens.Update(entity);
+            }
+
+            db.SaveChanges();
+            _logger.LogInformation("Shopify token saved in database for shop: {Shop}", shopDomain);
         }
 
         public string? GetToken(string shopDomain)
         {
-            _cache.TryGetValue(Normalize(shopDomain), out var token);
-            return token;
+            shopDomain = Normalize(shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.ShopifyTokens.FirstOrDefault(t => t.ShopDomain == shopDomain);
+            if (entity == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return _encryptionService.Decrypt(entity.EncryptedToken, entity.Iv);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to decrypt Shopify token for shop: {Shop}", shopDomain);
+                return null;
+            }
         }
 
         public bool HasToken(string shopDomain)
-            => _cache.ContainsKey(Normalize(shopDomain));
+        {
+            shopDomain = Normalize(shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            return db.ShopifyTokens.Any(t => t.ShopDomain == shopDomain);
+        }
 
         public void RemoveToken(string shopDomain)
         {
             shopDomain = Normalize(shopDomain);
-            _cache.TryRemove(shopDomain, out _);
-            _store.TryRemove(shopDomain, out _);
-            Persist();
-            _logger.LogInformation("Shopify token removed for shop: {Shop}", shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.ShopifyTokens.FirstOrDefault(t => t.ShopDomain == shopDomain);
+            if (entity != null)
+            {
+                db.ShopifyTokens.Remove(entity);
+                db.SaveChanges();
+                _logger.LogInformation("Shopify token removed from database for shop: {Shop}", shopDomain);
+            }
         }
 
         public IReadOnlyList<string> GetAllShops()
-            => _cache.Keys.ToList();
-
-        // ── Key management ───────────────────────────────────────────────────────
-
-        private byte[] LoadOrCreateKey()
         {
-            if (File.Exists(_keyFile))
-            {
-                var existing = File.ReadAllBytes(_keyFile);
-                if (existing.Length == 32)
-                    return existing;
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
 
-                _logger.LogWarning(
-                    "Encryption key file corrupt or wrong size — regenerating. " +
-                    "Existing encrypted tokens will be unreadable and must be re-acquired via OAuth.");
-            }
-
-            var key = RandomNumberGenerator.GetBytes(32);
-            File.WriteAllBytes(_keyFile, key);
-            _logger.LogInformation("Created new encryption key at {Path}", _keyFile);
-            return key;
+            return db.ShopifyTokens.Select(t => t.ShopDomain).ToList();
         }
-
-        // ── AES-GCM encrypt/decrypt ──────────────────────────────────────────────
-
-        private (string EncryptedBase64, string IvBase64) Encrypt(string plaintext)
-        {
-            var iv            = RandomNumberGenerator.GetBytes(12);
-            var plaintextBytes = Encoding.UTF8.GetBytes(plaintext);
-            var ciphertext    = new byte[plaintextBytes.Length];
-            var tag           = new byte[16];
-
-            using var aes = new AesGcm(_encryptionKey, 16);
-            aes.Encrypt(iv, plaintextBytes, ciphertext, tag);
-
-            var combined = new byte[ciphertext.Length + tag.Length];
-            ciphertext.CopyTo(combined, 0);
-            tag.CopyTo(combined, ciphertext.Length);
-
-            return (Convert.ToBase64String(combined), Convert.ToBase64String(iv));
-        }
-
-        private string Decrypt(string encryptedBase64, string ivBase64)
-        {
-            var combined   = Convert.FromBase64String(encryptedBase64);
-            var iv         = Convert.FromBase64String(ivBase64);
-            var ciphertext = combined[..^16];
-            var tag        = combined[^16..];
-            var plaintext  = new byte[ciphertext.Length];
-
-            using var aes = new AesGcm(_encryptionKey, 16);
-            aes.Decrypt(iv, ciphertext, tag, plaintext);
-
-            return Encoding.UTF8.GetString(plaintext);
-        }
-
-        // ── Disk I/O ─────────────────────────────────────────────────────────────
 
         private static string Normalize(string shop)
             => shop.Trim().ToLowerInvariant()
                    .Replace("https://", "").Replace("http://", "").TrimEnd('/');
 
-        private void LoadFromDisk()
+        private void MigrateLegacyFiles()
         {
             try
             {
-                if (!File.Exists(_tokenFile)) return;
+                var legacyEncryptedFile = Path.Combine(_dataDirectory, "shopify_tokens.json");
+                var legacyPlainTextFile = Path.Combine(_dataDirectory, "shop_tokens.json");
 
-                var json = File.ReadAllText(_tokenFile);
-                var dict = JsonSerializer.Deserialize<Dictionary<string, TokenRecord>>(json);
-                if (dict == null) return;
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
 
-                foreach (var (shop, record) in dict)
+                // 1. Migrate plain text legacy tokens if database is empty
+                if (File.Exists(legacyPlainTextFile))
                 {
-                    try
+                    _logger.LogInformation("Found legacy plain-text token file: {Path}. Starting migration.", legacyPlainTextFile);
+                    var json = File.ReadAllText(legacyPlainTextFile);
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                    if (dict != null)
                     {
-                        var token = Decrypt(record.EncryptedToken, record.IV);
-                        _store[shop] = record;
-                        _cache[shop] = token;
+                        foreach (var (shop, token) in dict)
+                        {
+                            var normalized = Normalize(shop);
+                            if (string.IsNullOrWhiteSpace(token)) continue;
+
+                            if (!db.ShopifyTokens.Any(t => t.ShopDomain == normalized))
+                            {
+                                var (encToken, iv) = _encryptionService.Encrypt(token);
+                                db.ShopifyTokens.Add(new ShopifyTokenEntity
+                                {
+                                    ShopDomain = normalized,
+                                    EncryptedToken = encToken,
+                                    Iv = iv
+                                });
+                            }
+                        }
+                        db.SaveChanges();
                     }
-                    catch (Exception ex)
+                    File.Move(legacyPlainTextFile, legacyPlainTextFile + ".migrated", overwrite: true);
+                    _logger.LogInformation("Legacy plain-text tokens migrated successfully.");
+                }
+
+                // 2. Migrate encrypted legacy tokens if database is empty
+                if (File.Exists(legacyEncryptedFile))
+                {
+                    _logger.LogInformation("Found legacy encrypted token file: {Path}. Starting migration.", legacyEncryptedFile);
+                    var json = File.ReadAllText(legacyEncryptedFile);
+                    
+                    // We need a temporary local key decryption for the file if it was encrypted with the old shop key file
+                    var keyFile = Path.Combine(_dataDirectory, "skypoint_key.bin");
+                    byte[]? oldKey = null;
+                    if (File.Exists(keyFile))
                     {
-                        _logger.LogWarning(ex,
-                            "Could not decrypt token for shop {Shop} — " +
-                            "will require OAuth reconnect.", shop);
+                        oldKey = File.ReadAllBytes(keyFile);
                     }
+
+                    if (oldKey != null && oldKey.Length == 32)
+                    {
+                        var dict = JsonSerializer.Deserialize<Dictionary<string, LegacyTokenRecord>>(json);
+                        if (dict != null)
+                        {
+                            using var aes = new System.Security.Cryptography.AesGcm(oldKey, 16);
+                            foreach (var (shop, record) in dict)
+                            {
+                                var normalized = Normalize(shop);
+                                try
+                                {
+                                    // Decrypt using old key
+                                    var combined = Convert.FromBase64String(record.EncryptedToken);
+                                    var ivBytes = Convert.FromBase64String(record.IV);
+                                    var ciphertext = combined[..^16];
+                                    var tag = combined[^16..];
+                                    var plaintextBytes = new byte[ciphertext.Length];
+                                    aes.Decrypt(ivBytes, ciphertext, tag, plaintextBytes);
+                                    var token = System.Text.Encoding.UTF8.GetString(plaintextBytes);
+
+                                    // Save via new database context
+                                    if (!db.ShopifyTokens.Any(t => t.ShopDomain == normalized))
+                                    {
+                                        var (newEncToken, newIv) = _encryptionService.Encrypt(token);
+                                        db.ShopifyTokens.Add(new ShopifyTokenEntity
+                                        {
+                                            ShopDomain = normalized,
+                                            EncryptedToken = newEncToken,
+                                            Iv = newIv
+                                        });
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogError(ex, "Failed to migrate token for {Shop} during legacy decryption.", shop);
+                                }
+                            }
+                            db.SaveChanges();
+                        }
+                    }
+                    File.Move(legacyEncryptedFile, legacyEncryptedFile + ".migrated", overwrite: true);
+                    _logger.LogInformation("Legacy encrypted tokens migrated successfully.");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex,
-                    "Could not load Shopify tokens from {Path} — starting empty.", _tokenFile);
+                _logger.LogError(ex, "Error migrating legacy shop tokens to database.");
             }
         }
 
-        private void Persist()
-        {
-            try
-            {
-                lock (_writeLock)
-                {
-                    var json = JsonSerializer.Serialize(
-                        new Dictionary<string, TokenRecord>(_store),
-                        new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(_tokenFile, json);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to persist Shopify tokens to {Path}", _tokenFile);
-            }
-        }
-
-        /// <summary>
-        /// One-time migration from the old plain-text shop_tokens.json format.
-        /// Reads { "shop": "token" } pairs, encrypts them, saves to the new file,
-        /// then renames the old file to shop_tokens.json.migrated so this only runs once.
-        /// </summary>
-        private void MigrateFromLegacyFile(string legacyPath)
-        {
-            if (!File.Exists(legacyPath)) return;
-
-            try
-            {
-                var json = File.ReadAllText(legacyPath);
-                var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-                if (dict == null || dict.Count == 0) return;
-
-                var imported = 0;
-                foreach (var (shop, token) in dict)
-                {
-                    var normalized = Normalize(shop);
-                    if (_cache.ContainsKey(normalized)) continue; // already loaded from new file
-                    if (string.IsNullOrWhiteSpace(token)) continue;
-
-                    var (enc, iv) = Encrypt(token);
-                    _store[normalized] = new TokenRecord(enc, iv);
-                    _cache[normalized] = token;
-                    imported++;
-                }
-
-                if (imported > 0)
-                {
-                    Persist(); // write all newly-imported tokens to shopify_tokens.json
-                    _logger.LogInformation(
-                        "Migrated {Count} Shopify token(s) from legacy {Path} → {New}",
-                        imported, legacyPath, _tokenFile);
-                }
-
-                // Rename old file so migration doesn't run again
-                File.Move(legacyPath, legacyPath + ".migrated", overwrite: true);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not migrate legacy token file {Path}", legacyPath);
-            }
-        }
+        private record LegacyTokenRecord(string EncryptedToken, string IV);
     }
 }

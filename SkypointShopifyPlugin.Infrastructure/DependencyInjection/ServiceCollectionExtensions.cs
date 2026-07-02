@@ -1,7 +1,9 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SkypointShopifyPlugin.Core.Configuration;
 using SkypointShopifyPlugin.Core.Interfaces;
+using SkypointShopifyPlugin.Infrastructure.Data;
 using SkypointShopifyPlugin.Infrastructure.Services;
 
 namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
@@ -10,6 +12,14 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
         {
+            var connectionString = configuration.GetConnectionString("DefaultConnection") 
+                ?? "Data Source=data/skypoint_shopify.db";
+
+            services.AddDbContext<SkypointDbContext>(options =>
+            {
+                options.UseSqlite(connectionString);
+            });
+
             services.Configure<SkypointApiSettings>(options =>
             {
                 configuration.GetSection(SkypointApiSettings.SectionName).Bind(options);
@@ -39,6 +49,9 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
             });
+
+            // Centralized Encryption Service
+            services.AddSingleton<IEncryptionService, EncryptionService>();
 
             // Shopify OAuth token store — in-memory cache + AES-encrypted file persistence.
             // Token is written on OAuth callback and reloaded on every server restart.
@@ -73,6 +86,10 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
             // shop that has a stored OAuth token. Permanently fixes the "reinstall required"
             // banner caused by server restarts or ngrok URL changes.
             services.AddHostedService<CarrierServiceBootstrapService>();
+
+            // Webhook in-memory background processing queue
+            services.AddSingleton<IWebhookQueue, WebhookQueue>();
+            services.AddHostedService<WebhookQueueProcessor>();
 
             return services;
         }

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SkypointShopifyPlugin.Core.Interfaces;
 
@@ -5,6 +6,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/admin")]
+    [Authorize]
     public class AdminController : ControllerBase
     {
         private readonly ILogger<AdminController> _logger;

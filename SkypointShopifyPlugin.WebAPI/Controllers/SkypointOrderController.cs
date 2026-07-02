@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.Core.Interfaces;
@@ -11,6 +12,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
     /// </summary>
     [ApiController]
     [Route("api/skypoint/orders")]
+    [Authorize]
     public class SkypointOrderController : ControllerBase
     {
         private readonly ILogger<SkypointOrderController> _logger;

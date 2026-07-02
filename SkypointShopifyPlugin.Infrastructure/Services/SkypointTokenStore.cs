@@ -1,30 +1,31 @@
-using System.Collections.Concurrent;
+using System;
+using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SkypointShopifyPlugin.Core.Interfaces;
+using SkypointShopifyPlugin.Infrastructure.Data;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
     /// <summary>
-    /// In-memory token cache backed by a persistent credential store.
-    ///
-    /// Tokens live in memory only (fast, no disk I/O on every carrier rate call).
-    /// Credentials (username + encrypted password) are persisted to disk via
-    /// ISkypointCredentialStore whenever SaveCredentials is called.
-    ///
-    /// On server restart the bootstrap service re-authenticates every known shop
-    /// using the persisted credentials, so carrier rates work immediately without
-    /// any hardcoded values or manual re-login.
+    /// Database-backed Skypoint token cache.
+    /// Eliminates in-memory caching state drift across multiple scaled-out web instances.
     /// </summary>
     public class SkypointTokenStore : ISkypointTokenStore
     {
-        private record TokenEntry(string Token, DateTime Expiration, string? UserId);
-
-        private readonly ConcurrentDictionary<string, TokenEntry> _tokens =
-            new(StringComparer.OrdinalIgnoreCase);
-
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ISkypointCredentialStore _credentialStore;
+        private readonly ILogger<SkypointTokenStore> _logger;
 
-        public SkypointTokenStore(ISkypointCredentialStore credentialStore)
-            => _credentialStore = credentialStore;
+        public SkypointTokenStore(
+            IServiceScopeFactory scopeFactory,
+            ISkypointCredentialStore credentialStore,
+            ILogger<SkypointTokenStore> logger)
+        {
+            _scopeFactory = scopeFactory;
+            _credentialStore = credentialStore;
+            _logger = logger;
+        }
 
         // ── ISkypointTokenStore ──────────────────────────────────────────────────
 
@@ -32,21 +33,67 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             => _credentialStore.Save(shopDomain, username, password);
 
         public void SaveToken(string shopDomain, string skypointToken, DateTime expiration, string? userId = null)
-            => _tokens[Normalize(shopDomain)] = new TokenEntry(skypointToken, expiration, userId);
+        {
+            shopDomain = Normalize(shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.SkypointTokens.FirstOrDefault(t => t.ShopDomain == shopDomain);
+            if (entity == null)
+            {
+                entity = new SkypointTokenEntity
+                {
+                    ShopDomain = shopDomain,
+                    Token = skypointToken,
+                    Expiration = expiration,
+                    UserId = userId,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                db.SkypointTokens.Add(entity);
+            }
+            else
+            {
+                entity.Token = skypointToken;
+                entity.Expiration = expiration;
+                entity.UserId = userId;
+                entity.UpdatedAt = DateTime.UtcNow;
+                db.SkypointTokens.Update(entity);
+            }
+
+            db.SaveChanges();
+            _logger.LogInformation("Saved Skypoint token to database for shop: {Shop}", shopDomain);
+        }
 
         public string? GetToken(string shopDomain)
         {
-            var key = Normalize(shopDomain);
-            if (_tokens.TryGetValue(key, out var entry) && entry.Expiration > DateTime.UtcNow)
-                return entry.Token;
+            shopDomain = Normalize(shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.SkypointTokens.FirstOrDefault(t => t.ShopDomain == shopDomain);
+            if (entity != null && entity.Expiration > DateTime.UtcNow)
+            {
+                return entity.Token;
+            }
+
             return null;
         }
 
         public string? GetUserId(string shopDomain)
         {
-            var key = Normalize(shopDomain);
-            if (_tokens.TryGetValue(key, out var entry) && entry.Expiration > DateTime.UtcNow)
-                return entry.UserId;
+            shopDomain = Normalize(shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.SkypointTokens.FirstOrDefault(t => t.ShopDomain == shopDomain);
+            if (entity != null && entity.Expiration > DateTime.UtcNow)
+            {
+                return entity.UserId;
+            }
+
             return null;
         }
 
@@ -58,11 +105,30 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         }
 
         public bool IsTokenValid(string shopDomain)
-            => _tokens.TryGetValue(Normalize(shopDomain), out var e) && e.Expiration > DateTime.UtcNow;
+        {
+            shopDomain = Normalize(shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            return db.SkypointTokens.Any(t => t.ShopDomain == shopDomain && t.Expiration > DateTime.UtcNow);
+        }
 
         public void Clear(string shopDomain)
         {
-            _tokens.TryRemove(Normalize(shopDomain), out _);
+            shopDomain = Normalize(shopDomain);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.SkypointTokens.FirstOrDefault(t => t.ShopDomain == shopDomain);
+            if (entity != null)
+            {
+                db.SkypointTokens.Remove(entity);
+                db.SaveChanges();
+                _logger.LogInformation("Cleared Skypoint token from database for shop: {Shop}", shopDomain);
+            }
+
             _credentialStore.Remove(shopDomain);
         }
 

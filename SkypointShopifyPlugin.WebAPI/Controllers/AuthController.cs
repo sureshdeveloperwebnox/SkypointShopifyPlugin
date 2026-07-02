@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.Core.Interfaces;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using System.Security.Cryptography;
 
 namespace SkypointShopifyPlugin.WebAPI.Controllers
 {
@@ -11,15 +15,18 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         private readonly ILogger<AuthController> _logger;
         private readonly ISkypointApiClient _skypointApiClient;
         private readonly ISkypointTokenStore _skypointTokenStore;
+        private readonly IConfiguration _configuration;
 
         public AuthController(
             ILogger<AuthController> logger,
             ISkypointApiClient skypointApiClient,
-            ISkypointTokenStore skypointTokenStore)
+            ISkypointTokenStore skypointTokenStore,
+            IConfiguration configuration)
         {
             _logger = logger;
             _skypointApiClient = skypointApiClient;
             _skypointTokenStore = skypointTokenStore;
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -62,15 +69,16 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     _logger.LogInformation("Skypoint token cached for shop: {Shop}", shop);
                 }
 
+                var jwtToken = GenerateLocalJwtToken(request.Username, loginResponse.Role ?? "client", loginResponse.Id ?? "", shop);
+
                 _logger.LogInformation("Login successful for: {Username}", request.Username);
 
                 return Ok(new
                 {
                     success = true,
                     message = "Login successful",
-                    // Token returned to client — stored in sessionStorage only (not localStorage/disk)
-                    token      = loginResponse.Token.TokenValue,
-                    expiration = loginResponse.Token.Expiration,
+                    token      = jwtToken,
+                    expiration = DateTime.UtcNow.AddDays(7),
                     user = new
                     {
                         id         = loginResponse.Id,
@@ -113,15 +121,26 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 
                 var reg = await _skypointApiClient.RegisterAsync(skypointReq);
 
-                if (reg == null || string.IsNullOrEmpty(reg.Token?.TokenValue))
-                    return BadRequest(new { error = "Registration failed" });
+                // Cache token per shop if shop is provided in query/headers
+                var shop = Request.Query["shop"].ToString();
+                if (string.IsNullOrEmpty(shop))
+                    shop = Request.Headers["X-Shop-Domain"].ToString();
+
+                if (!string.IsNullOrEmpty(shop))
+                {
+                    shop = shop.Replace("https://", "").Replace("http://", "").TrimEnd('/');
+                    _skypointTokenStore.SaveCredentials(shop, request.Email, request.Password);
+                    _skypointTokenStore.SaveToken(shop, reg.Token.TokenValue, reg.Token.Expiration, reg.Id);
+                }
+
+                var jwtToken = GenerateLocalJwtToken(request.Email, reg.Role ?? "client", reg.Id ?? "", shop);
 
                 return Ok(new
                 {
                     success    = true,
                     message    = "Registration successful",
-                    token      = reg.Token.TokenValue,
-                    expiration = reg.Token.Expiration,
+                    token      = jwtToken,
+                    expiration = DateTime.UtcNow.AddDays(7),
                     user = new
                     {
                         id        = reg.Id,
@@ -144,6 +163,38 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         /// <summary>Logout — client clears sessionStorage; nothing to do server-side.</summary>
         [HttpPost("logout")]
         public IActionResult Logout() => Ok(new { success = true });
+
+        private string GenerateLocalJwtToken(string username, string role, string userId, string? shop)
+        {
+            var encryptionKey = _configuration["EncryptionKey"] ?? Environment.GetEnvironmentVariable("ENCRYPTION_KEY") ?? "SkypointShopifyPluginDefaultSecretKey32BytesForSigningTokens!";
+            byte[] jwtKeyBytes;
+            using (var sha256 = SHA256.Create())
+            {
+                jwtKeyBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(encryptionKey));
+            }
+            var key = new SymmetricSecurityKey(jwtKeyBytes);
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var claims = new List<System.Security.Claims.Claim>
+            {
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, username),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userId),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role)
+            };
+
+            if (!string.IsNullOrEmpty(shop))
+            {
+                claims.Add(new System.Security.Claims.Claim("shop", shop));
+            }
+
+            var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
+                claims: claims,
+                expires: DateTime.UtcNow.AddDays(7),
+                signingCredentials: creds
+            );
+
+            return new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().WriteToken(token);
+        }
     }
 
     public class RegisterRequest

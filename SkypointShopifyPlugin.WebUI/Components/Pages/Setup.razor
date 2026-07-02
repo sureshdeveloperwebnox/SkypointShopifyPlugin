@@ -172,11 +172,7 @@
     {
         try
         {
-            var res = await Http.GetFromJsonAsync<AppConfiguration>("api/configuration");
-            if (res != null)
-            {
-                config = res;
-            }
+            config = await Http.GetFromJsonAsync<AppConfiguration>("api/configuration") ?? new();
             isLoaded = true;
             StateHasChanged();
         }
@@ -200,7 +196,7 @@
             var response = await Http.PostAsJsonAsync("api/configuration", config);
             if (response.IsSuccessStatusCode)
             {
-                successMessage = "Your configuration has been saved to data/app_config.json. You can now restart the application to apply the changes.";
+                successMessage = "Your configuration has been saved to the database. It is now active and applied.";
             }
             else
             {

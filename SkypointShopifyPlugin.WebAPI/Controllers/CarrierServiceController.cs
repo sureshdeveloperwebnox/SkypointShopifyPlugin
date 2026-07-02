@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using SkypointShopifyPlugin.Core.DTOs.Shopify;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.Core.Interfaces;
+using SkypointShopifyPlugin.WebAPI.Filters;
 
 namespace SkypointShopifyPlugin.WebAPI.Controllers
 {
@@ -45,6 +46,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         }
 
         [HttpPost("rates")]
+        [ShopifyHmacValidation]
         public async Task<IActionResult> GetRates()
         {
             _logger.LogInformation("Rate request received");

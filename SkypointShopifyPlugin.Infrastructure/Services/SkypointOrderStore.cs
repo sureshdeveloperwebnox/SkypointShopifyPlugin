@@ -1,143 +1,169 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.Core.Interfaces;
+using SkypointShopifyPlugin.Infrastructure.Data;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
+    public class SkypointOrderStoreOptions
+    {
+        public const string SectionName = "SkypointOrderStore";
+        public string DataDirectory { get; set; } = "data/orders";
+    }
+
     /// <summary>
-    /// File-based storage for Skypoint orders
-    /// Stores orders as JSON files in the data directory
-    /// Mirrors the pattern used for token stores
+    /// Database-backed store for Skypoint orders.
+    /// Provides stateless order persistence and highly efficient querying using LINQ.
+    /// Includes a one-time migration for legacy file-based order JSONs.
     /// </summary>
     public class SkypointOrderStore : ISkypointOrderStore
     {
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<SkypointOrderStore> _logger;
         private readonly string _ordersDirectory;
-        private readonly object _lock = new();
 
         public SkypointOrderStore(
+            IServiceScopeFactory scopeFactory,
             ILogger<SkypointOrderStore> logger,
             IOptions<SkypointOrderStoreOptions> options)
         {
+            _scopeFactory = scopeFactory;
             _logger = logger;
             _ordersDirectory = options.Value.DataDirectory;
-            
-            // Ensure directory exists
-            if (!Directory.Exists(_ordersDirectory))
-            {
-                Directory.CreateDirectory(_ordersDirectory);
-                _logger.LogInformation("Created orders directory: {Directory}", _ordersDirectory);
-            }
+
+            // Perform legacy orders migration on startup
+            MigrateLegacyOrders();
         }
 
         public async Task SaveOrderAsync(SkypointOrder order)
         {
-            lock (_lock)
+            var entity = MapToEntity(order);
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var existing = await db.SkypointOrders.FindAsync(order.Id);
+            if (existing == null)
             {
-                var filePath = GetOrderFilePath(order.Id);
-                var json = JsonSerializer.Serialize(order, new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-                File.WriteAllText(filePath, json);
-                _logger.LogInformation("Saved order {OrderId} to {FilePath}", order.Id, filePath);
+                db.SkypointOrders.Add(entity);
             }
-            await Task.CompletedTask;
+            else
+            {
+                db.Entry(existing).CurrentValues.SetValues(entity);
+                // Handle complex fields which require explicit updates since they are not mapped simple values
+                existing.CustomerJson = entity.CustomerJson;
+                existing.LineItemsJson = entity.LineItemsJson;
+                existing.ShippingAddressJson = entity.ShippingAddressJson;
+                existing.BillingAddressJson = entity.BillingAddressJson;
+                db.SkypointOrders.Update(existing);
+            }
+
+            await db.SaveChangesAsync();
+            _logger.LogInformation("Saved order {OrderId} to database", order.Id);
         }
 
         public async Task<SkypointOrder?> GetOrderByIdAsync(string orderId)
         {
-            var filePath = GetOrderFilePath(orderId);
-            if (!File.Exists(filePath))
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = await db.SkypointOrders.FindAsync(orderId);
+            if (entity == null)
             {
-                _logger.LogDebug("Order not found: {OrderId}", orderId);
                 return null;
             }
 
-            lock (_lock)
-            {
-                var json = File.ReadAllText(filePath);
-                var order = JsonSerializer.Deserialize<SkypointOrder>(json);
-                return order;
-            }
+            return MapToDto(entity);
         }
 
         public async Task<SkypointOrder?> GetOrderByNumberAsync(string orderNumber)
         {
-            var orders = await GetAllOrdersAsync();
-            return orders.FirstOrDefault(o => o.OrderNumber.Equals(orderNumber, StringComparison.OrdinalIgnoreCase));
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = db.SkypointOrders.FirstOrDefault(o => o.OrderNumber == orderNumber);
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return MapToDto(entity);
         }
 
         public async Task<List<SkypointOrder>> GetOrdersAsync(SkypointOrderFilter filter)
         {
-            var allOrders = await GetAllOrdersAsync();
-            
-            // Apply filters
-            var filtered = allOrders.AsEnumerable();
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
 
+            var query = db.SkypointOrders.AsQueryable();
+
+            // Apply filters
             if (!string.IsNullOrEmpty(filter.VendorId))
             {
-                filtered = filtered.Where(o => o.VendorId == filter.VendorId);
+                query = query.Where(o => o.VendorId == filter.VendorId);
             }
 
             if (!string.IsNullOrEmpty(filter.Status))
             {
-                filtered = filtered.Where(o => o.Status.Equals(filter.Status, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(o => o.Status == filter.Status);
             }
 
             if (!string.IsNullOrEmpty(filter.OrderSource))
             {
-                filtered = filtered.Where(o => o.OrderSource.Equals(filter.OrderSource, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(o => o.OrderSource == filter.OrderSource);
             }
 
             if (filter.StartDate.HasValue)
             {
-                filtered = filtered.Where(o => o.CreatedAt >= filter.StartDate.Value);
+                query = query.Where(o => o.CreatedAt >= filter.StartDate.Value);
             }
 
             if (filter.EndDate.HasValue)
             {
-                filtered = filtered.Where(o => o.CreatedAt <= filter.EndDate.Value);
+                query = query.Where(o => o.CreatedAt <= filter.EndDate.Value);
             }
 
             if (!string.IsNullOrEmpty(filter.SearchTerm))
             {
-                var searchLower = filter.SearchTerm.ToLowerInvariant();
-                filtered = filtered.Where(o =>
-                    o.OrderNumber.ToLowerInvariant().Contains(searchLower) ||
-                    (o.Customer?.Email?.ToLowerInvariant().Contains(searchLower) ?? false) ||
-                    (o.Customer?.FirstName?.ToLowerInvariant().Contains(searchLower) ?? false) ||
-                    (o.Customer?.LastName?.ToLowerInvariant().Contains(searchLower) ?? false));
+                var search = filter.SearchTerm.ToLower();
+                query = query.Where(o =>
+                    o.OrderNumber.ToLower().Contains(search) ||
+                    (o.CustomerJson != null && o.CustomerJson.ToLower().Contains(search)));
             }
 
             // Apply sorting
-            filtered = filter.SortBy.ToLowerInvariant() switch
+            query = filter.SortBy.ToLowerInvariant() switch
             {
                 "created_at" => filter.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                    ? filtered.OrderBy(o => o.CreatedAt)
-                    : filtered.OrderByDescending(o => o.CreatedAt),
+                    ? query.OrderBy(o => o.CreatedAt)
+                    : query.OrderByDescending(o => o.CreatedAt),
                 "updated_at" => filter.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                    ? filtered.OrderBy(o => o.UpdatedAt)
-                    : filtered.OrderByDescending(o => o.UpdatedAt),
+                    ? query.OrderBy(o => o.UpdatedAt)
+                    : query.OrderByDescending(o => o.UpdatedAt),
                 "total_price" => filter.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                    ? filtered.OrderBy(o => o.TotalPrice)
-                    : filtered.OrderByDescending(o => o.TotalPrice),
+                    ? query.OrderBy(o => o.TotalPrice)
+                    : query.OrderByDescending(o => o.TotalPrice),
                 "order_number" => filter.SortOrder.Equals("asc", StringComparison.OrdinalIgnoreCase)
-                    ? filtered.OrderBy(o => o.OrderNumber)
-                    : filtered.OrderByDescending(o => o.OrderNumber),
-                _ => filtered.OrderByDescending(o => o.CreatedAt)
+                    ? query.OrderBy(o => o.OrderNumber)
+                    : query.OrderByDescending(o => o.OrderNumber),
+                _ => query.OrderByDescending(o => o.CreatedAt)
             };
 
             // Apply pagination
-            var total = filtered.Count();
-            var paginated = filtered
+            var list = query
                 .Skip((filter.Page - 1) * filter.Limit)
                 .Take(filter.Limit)
                 .ToList();
 
-            return paginated;
+            return list.Select(MapToDto).ToList();
         }
 
         public async Task UpdateOrderAsync(SkypointOrder order)
@@ -148,59 +174,60 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public async Task DeleteOrderAsync(string orderId)
         {
-            var filePath = GetOrderFilePath(orderId);
-            if (File.Exists(filePath))
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = await db.SkypointOrders.FindAsync(orderId);
+            if (entity != null)
             {
-                lock (_lock)
-                {
-                    File.Delete(filePath);
-                    _logger.LogInformation("Deleted order {OrderId}", orderId);
-                }
+                db.SkypointOrders.Remove(entity);
+                await db.SaveChangesAsync();
+                _logger.LogInformation("Deleted order {OrderId} from database", orderId);
             }
-            await Task.CompletedTask;
         }
 
         public async Task<int> GetOrderCountAsync(SkypointOrderFilter filter)
         {
-            var allOrders = await GetAllOrdersAsync();
-            
-            // Apply same filters as GetOrdersAsync
-            var filtered = allOrders.AsEnumerable();
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
 
+            var query = db.SkypointOrders.AsQueryable();
+
+            // Apply filters
             if (!string.IsNullOrEmpty(filter.VendorId))
             {
-                filtered = filtered.Where(o => o.VendorId == filter.VendorId);
+                query = query.Where(o => o.VendorId == filter.VendorId);
             }
 
             if (!string.IsNullOrEmpty(filter.Status))
             {
-                filtered = filtered.Where(o => o.Status.Equals(filter.Status, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(o => o.Status == filter.Status);
             }
 
             if (!string.IsNullOrEmpty(filter.OrderSource))
             {
-                filtered = filtered.Where(o => o.OrderSource.Equals(filter.OrderSource, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(o => o.OrderSource == filter.OrderSource);
             }
 
             if (filter.StartDate.HasValue)
             {
-                filtered = filtered.Where(o => o.CreatedAt >= filter.StartDate.Value);
+                query = query.Where(o => o.CreatedAt >= filter.StartDate.Value);
             }
 
             if (filter.EndDate.HasValue)
             {
-                filtered = filtered.Where(o => o.CreatedAt <= filter.EndDate.Value);
+                query = query.Where(o => o.CreatedAt <= filter.EndDate.Value);
             }
 
             if (!string.IsNullOrEmpty(filter.SearchTerm))
             {
-                var searchLower = filter.SearchTerm.ToLowerInvariant();
-                filtered = filtered.Where(o =>
-                    o.OrderNumber.ToLowerInvariant().Contains(searchLower) ||
-                    (o.Customer?.Email?.ToLowerInvariant().Contains(searchLower) ?? false));
+                var search = filter.SearchTerm.ToLower();
+                query = query.Where(o =>
+                    o.OrderNumber.ToLower().Contains(search) ||
+                    (o.CustomerJson != null && o.CustomerJson.ToLower().Contains(search)));
             }
 
-            return filtered.Count();
+            return query.Count();
         }
 
         public async Task<bool> IsOrderProcessedAsync(string orderId)
@@ -211,74 +238,124 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public async Task MarkOrderAsProcessedAsync(string orderId, string bookingId, string trackNo, string status)
         {
-            var order = await GetOrderByIdAsync(orderId);
-            if (order != null)
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+            var entity = await db.SkypointOrders.FindAsync(orderId);
+            if (entity != null)
             {
-                order.SkypointBookingId = bookingId;
-                order.SkypointTrackNo = trackNo;
-                order.SkypointStatus = status;
-                order.Status = "processing";
-                order.UpdatedAt = DateTime.UtcNow;
-                await SaveOrderAsync(order);
-                _logger.LogInformation("Marked order {OrderId} as processed with booking {BookingId}", orderId, bookingId);
+                entity.SkypointBookingId = bookingId;
+                entity.SkypointTrackNo = trackNo;
+                entity.SkypointStatus = status;
+                entity.Status = "processing";
+                entity.UpdatedAt = DateTime.UtcNow;
+
+                db.SkypointOrders.Update(entity);
+                await db.SaveChangesAsync();
+                _logger.LogInformation("Marked order {OrderId} as processed with booking {BookingId} in database", orderId, bookingId);
             }
         }
 
-        private List<SkypointOrder> GetAllOrders()
+        private static SkypointOrderEntity MapToEntity(SkypointOrder order)
         {
-            lock (_lock)
+            return new SkypointOrderEntity
             {
-                var orders = new List<SkypointOrder>();
-                
-                if (!Directory.Exists(_ordersDirectory))
-                {
-                    return orders;
-                }
+                Id = order.Id,
+                OrderNumber = order.OrderNumber,
+                CreatedAt = order.CreatedAt,
+                UpdatedAt = order.UpdatedAt,
+                FinancialStatus = order.FinancialStatus,
+                FulfillmentStatus = order.FulfillmentStatus,
+                TotalPrice = order.TotalPrice,
+                Currency = order.Currency,
+                Status = order.Status,
+                SkypointBookingId = order.SkypointBookingId,
+                SkypointTrackNo = order.SkypointTrackNo,
+                SkypointStatus = order.SkypointStatus,
+                OrderSource = order.OrderSource,
+                VendorId = order.VendorId,
+                CustomerJson = order.Customer != null ? JsonSerializer.Serialize(order.Customer) : null,
+                LineItemsJson = order.LineItems != null ? JsonSerializer.Serialize(order.LineItems) : null,
+                ShippingAddressJson = order.ShippingAddress != null ? JsonSerializer.Serialize(order.ShippingAddress) : null,
+                BillingAddressJson = order.BillingAddress != null ? JsonSerializer.Serialize(order.BillingAddress) : null
+            };
+        }
 
-                var files = Directory.GetFiles(_ordersDirectory, "*.json");
-                foreach (var file in files)
+        private static SkypointOrder MapToDto(SkypointOrderEntity entity)
+        {
+            return new SkypointOrder
+            {
+                Id = entity.Id,
+                OrderNumber = entity.OrderNumber,
+                CreatedAt = entity.CreatedAt,
+                UpdatedAt = entity.UpdatedAt,
+                FinancialStatus = entity.FinancialStatus,
+                FulfillmentStatus = entity.FulfillmentStatus,
+                TotalPrice = entity.TotalPrice,
+                Currency = entity.Currency,
+                Status = entity.Status,
+                SkypointBookingId = entity.SkypointBookingId,
+                SkypointTrackNo = entity.SkypointTrackNo,
+                SkypointStatus = entity.SkypointStatus,
+                OrderSource = entity.OrderSource,
+                VendorId = entity.VendorId,
+                Customer = !string.IsNullOrEmpty(entity.CustomerJson) ? JsonSerializer.Deserialize<SkypointCustomer>(entity.CustomerJson) : null,
+                LineItems = !string.IsNullOrEmpty(entity.LineItemsJson) ? JsonSerializer.Deserialize<List<SkypointOrderItem>>(entity.LineItemsJson) ?? new() : new(),
+                ShippingAddress = !string.IsNullOrEmpty(entity.ShippingAddressJson) ? JsonSerializer.Deserialize<SkypointAddress>(entity.ShippingAddressJson) : null,
+                BillingAddress = !string.IsNullOrEmpty(entity.BillingAddressJson) ? JsonSerializer.Deserialize<SkypointAddress>(entity.BillingAddressJson) : null
+            };
+        }
+
+        private void MigrateLegacyOrders()
+        {
+            try
+            {
+                if (Directory.Exists(_ordersDirectory))
                 {
-                    try
+                    var files = Directory.GetFiles(_ordersDirectory, "*.json");
+                    if (files.Length == 0) return;
+
+                    _logger.LogInformation("Found {Count} legacy order JSON files. Starting migration.", files.Length);
+
+                    using var scope = _scopeFactory.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
+
+                    var migratedCount = 0;
+                    foreach (var file in files)
                     {
-                        var json = File.ReadAllText(file);
-                        var order = JsonSerializer.Deserialize<SkypointOrder>(json);
-                        if (order != null)
+                        try
                         {
-                            orders.Add(order);
+                            var json = File.ReadAllText(file);
+                            var order = JsonSerializer.Deserialize<SkypointOrder>(json);
+                            if (order != null)
+                            {
+                                if (!db.SkypointOrders.Any(o => o.Id == order.Id))
+                                {
+                                    db.SkypointOrders.Add(MapToEntity(order));
+                                    migratedCount++;
+                                }
+                            }
+                            
+                            // Move/rename file so it doesn't get processed again
+                            File.Move(file, file + ".migrated", overwrite: true);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Failed to migrate order file: {File}", file);
                         }
                     }
-                    catch (Exception ex)
+
+                    if (migratedCount > 0)
                     {
-                        _logger.LogError(ex, "Error reading order file: {File}", file);
+                        db.SaveChanges();
+                        _logger.LogInformation("Successfully migrated {Count} orders to the database.", migratedCount);
                     }
                 }
-
-                return orders;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error occurred during legacy order migration.");
             }
         }
-
-        private async Task<List<SkypointOrder>> GetAllOrdersAsync()
-        {
-            return await Task.FromResult(GetAllOrders());
-        }
-
-        private string GetOrderFilePath(string orderId)
-        {
-            var safeOrderId = orderId.Replace("/", "_").Replace("\\", "_").Replace(":", "_");
-            return Path.Combine(_ordersDirectory, $"{safeOrderId}.json");
-        }
-    }
-
-    /// <summary>
-    /// Configuration options for Skypoint order store
-    /// </summary>
-    public class SkypointOrderStoreOptions
-    {
-        public const string SectionName = "SkypointOrderStore";
-        
-        /// <summary>
-        /// Directory where order JSON files are stored
-        /// </summary>
-        public string DataDirectory { get; set; } = "data/orders";
     }
 }

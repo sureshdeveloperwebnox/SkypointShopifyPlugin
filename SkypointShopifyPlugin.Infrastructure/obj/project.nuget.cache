@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "N677Hy6gBqU=",
+  "dgSpecHash": "kZp7+hzBRIQ=",
   "success": true,
   "projectFilePath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Infrastructure\\SkypointShopifyPlugin.Infrastructure.csproj",
   "expectedPackageFiles": [
@@ -47,6 +47,8 @@
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.identitymodel.logging\\8.14.0\\microsoft.identitymodel.logging.8.14.0.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.identitymodel.tokens\\8.14.0\\microsoft.identitymodel.tokens.8.14.0.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\mono.texttemplating\\3.0.0\\mono.texttemplating.3.0.0.nupkg.sha512",
+    "C:\\Users\\sures\\.nuget\\packages\\polly\\8.4.1\\polly.8.4.1.nupkg.sha512",
+    "C:\\Users\\sures\\.nuget\\packages\\polly.core\\8.4.1\\polly.core.8.4.1.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\sqlitepclraw.bundle_e_sqlite3\\2.1.10\\sqlitepclraw.bundle_e_sqlite3.2.1.10.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\sqlitepclraw.core\\2.1.10\\sqlitepclraw.core.2.1.10.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\sqlitepclraw.lib.e_sqlite3\\2.1.10\\sqlitepclraw.lib.e_sqlite3.2.1.10.nupkg.sha512",

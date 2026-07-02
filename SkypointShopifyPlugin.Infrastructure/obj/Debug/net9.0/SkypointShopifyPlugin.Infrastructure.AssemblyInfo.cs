@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SkypointShopifyPlugin.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a00649d9ddd4a853c23fc1ce408f89abf863a53b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+344596c3c94c1af24e181a695125560030505a8e")]
 [assembly: System.Reflection.AssemblyProductAttribute("SkypointShopifyPlugin.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SkypointShopifyPlugin.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

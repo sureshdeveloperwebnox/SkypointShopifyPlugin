@@ -5,6 +5,10 @@ using SkypointShopifyPlugin.Application.Common;
 using SkypointShopifyPlugin.Core.DTOs.Shopify;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.Core.Interfaces;
+using SkypointShopifyPlugin.WebAPI.Filters;
+using Microsoft.AspNetCore.Authorization;
+using SkypointShopifyPlugin.Infrastructure.Services;
+using SkypointShopifyPlugin.Core.Common;
 
 namespace SkypointShopifyPlugin.WebAPI.Controllers
 {
@@ -12,8 +16,9 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
     [Route("api/shopify")]
     public class ShopifyController : ControllerBase
     {
-        private static readonly Dictionary<string, BookingResponse> ProcessedOrderBookings = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly object ProcessedOrderBookingsLock = new();
+        private static IWebhookQueue? _staticQueueInstance;
+        public static System.Collections.Concurrent.ConcurrentDictionary<string, BookingResponse> ProcessedOrderBookings => 
+            _staticQueueInstance?.ProcessedOrderBookings ?? new System.Collections.Concurrent.ConcurrentDictionary<string, BookingResponse>(StringComparer.OrdinalIgnoreCase);
 
         private readonly IMediator _mediator;
         private readonly ILogger<ShopifyController> _logger;
@@ -23,8 +28,18 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         private readonly IShopifyAdminService _shopifyAdminService;
         private readonly IShopTokenStore _shopTokenStore;
         private readonly ISkypointTokenStore _skypointTokenStore;
+        private readonly IWebhookQueue _webhookQueue;
 
-        public ShopifyController(IMediator mediator, ILogger<ShopifyController> logger, IShopifyOAuthService oauthService, IConfiguration configuration, ISkypointApiClient skypointApiClient, IShopifyAdminService shopifyAdminService, IShopTokenStore shopTokenStore, ISkypointTokenStore skypointTokenStore)
+        public ShopifyController(
+            IMediator mediator, 
+            ILogger<ShopifyController> logger, 
+            IShopifyOAuthService oauthService, 
+            IConfiguration configuration, 
+            ISkypointApiClient skypointApiClient, 
+            IShopifyAdminService shopifyAdminService, 
+            IShopTokenStore shopTokenStore, 
+            ISkypointTokenStore skypointTokenStore,
+            IWebhookQueue webhookQueue)
         {
             _mediator = mediator;
             _logger = logger;
@@ -34,6 +49,8 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             _shopifyAdminService = shopifyAdminService;
             _shopTokenStore = shopTokenStore;
             _skypointTokenStore = skypointTokenStore;
+            _webhookQueue = webhookQueue;
+            _staticQueueInstance = webhookQueue;
         }
 
         /// <summary>
@@ -160,6 +177,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         /// GET /api/shopify/setup?shop=yourstore.myshopify.com
         /// </summary>
         [HttpGet("setup")]
+        [Authorize]
         public async Task<IActionResult> Setup([FromQuery] string shop)
         {
             if (string.IsNullOrEmpty(shop))
@@ -281,140 +299,31 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         /// Webhook endpoint for orders/create
         /// </summary>
         [HttpPost("orders/create")]
+        [ShopifyHmacValidation]
         public async Task<IActionResult> OrdersCreate()
         {
             _logger.LogInformation("Order create webhook received");
             
-            if (!await VerifyWebhookSignature())
-            {
-                _logger.LogWarning("Invalid webhook signature");
-                return Unauthorized();
-            }
-
             try
             {
                 var body = await new StreamReader(Request.Body).ReadToEndAsync();
-                var shopifyOrder = JsonSerializer.Deserialize<ShopifyOrderWebhook>(body);
-
-                if (shopifyOrder == null)
-                {
-                    _logger.LogError("Failed to deserialize Shopify order");
-                    return BadRequest();
-                }
-
-                lock (ProcessedOrderBookingsLock)
-                {
-                    var orderIdString = shopifyOrder.id.ToString();
-                    if (ProcessedOrderBookings.TryGetValue(orderIdString, out var existingBooking))
-                    {
-                        _logger.LogInformation(
-                            "Shopify order {OrderId} already processed as Skypoint booking {BookingId}",
-                            shopifyOrder.id,
-                            existingBooking.Id);
-
-                        return Ok(new
-                        {
-                            message = "Order already processed",
-                            shopifyOrderId = shopifyOrder.id,
-                            skypointBookingId = existingBooking.Id,
-                            skypointTrackNo = existingBooking.TrackNo,
-                            skypointStatus = existingBooking.Status
-                        });
-                    }
-                }
-
+                
                 var shop = Request.Headers["X-Shopify-Shop-Domain"].FirstOrDefault();
                 if (string.IsNullOrEmpty(shop))
                 {
                     _logger.LogError("Webhook headers missing shop domain");
                     return BadRequest(new { error = "Missing shop domain header" });
                 }
-
                 shop = NormalizeShopDomain(shop);
-                _logger.LogInformation("Processing order {OrderId} for shop {Shop}", shopifyOrder.id, shop);
 
-                // Retrieve dynamically stored Skypoint token/user id or login using cached credentials.
-                var token = _skypointTokenStore.GetToken(shop);
-                var skypointUserId = _skypointTokenStore.GetUserId(shop);
-                if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(skypointUserId))
+                await _webhookQueue.QueueWebhookAsync(new WebhookJob
                 {
-                    var creds = _skypointTokenStore.GetCredentials(shop);
-                    if (creds == null)
-                    {
-                        _logger.LogError("No Skypoint credentials found for shop {Shop}", shop);
-                        return BadRequest(new { error = $"Skypoint credentials not configured for shop: {shop}" });
-                    }
+                    ShopDomain = shop,
+                    Topic = "orders/create",
+                    Payload = body
+                });
 
-                    var loginResponse = await _skypointApiClient.LoginAsync(new LoginRequest
-                    {
-                        Username = creds.Value.username,
-                        Pwd = creds.Value.password
-                    });
-
-                    if (loginResponse?.Token?.TokenValue == null)
-                    {
-                        _logger.LogError("Failed to login to Skypoint API for shop {Shop}", shop);
-                        return StatusCode(500, new { error = "Failed to login to Skypoint API" });
-                    }
-
-                    token = loginResponse.Token.TokenValue;
-                    skypointUserId = loginResponse.Id;
-                    _skypointTokenStore.SaveToken(shop, token, loginResponse.Token.Expiration, skypointUserId);
-                }
-
-                // Convert Shopify order to Skypoint booking request
-                var bookingRequest = MapShopifyOrderToSkypointBooking(shopifyOrder, skypointUserId, _configuration);
-
-                // Create booking in Skypoint
-                BookingResponse? bookingResponse = null;
-                try
-                {
-                    bookingResponse = await _skypointApiClient.CreateBookingAsync(bookingRequest, token);
-                }
-                catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
-                    _logger.LogWarning(ex, "Skypoint API rejected booking due to invalid postal code/suburb for order {OrderId}. Order: {OrderNumber}, Pickup: {PickupPCode}/{FromSuburb}, Dropoff: {DropOffPCode}/{ToSuburb}",
-                        shopifyOrder.id, shopifyOrder.order_number, bookingRequest.PickUpPCode, bookingRequest.FromSuburb, bookingRequest.DropOffPCode, bookingRequest.ToSuburb);
-                    
-                    return StatusCode(400, new { 
-                        error = "Skypoint API rejected booking - invalid postal code/suburb combination",
-                        message = "The pickup or dropoff location is not supported by Skypoint",
-                        shopifyOrderId = shopifyOrder.id,
-                        orderNumber = shopifyOrder.order_number,
-                        pickupPCode = bookingRequest.PickUpPCode,
-                        pickupSuburb = bookingRequest.FromSuburb,
-                        dropOffPCode = bookingRequest.DropOffPCode,
-                        dropOffSuburb = bookingRequest.ToSuburb
-                    });
-                }
-                catch (HttpRequestException ex)
-                {
-                    _logger.LogError(ex, "Skypoint API error for order {OrderId}", shopifyOrder.id);
-                    return StatusCode(500, new { error = "Skypoint API error", message = ex.Message });
-                }
-
-                if (bookingResponse != null)
-                {
-                    lock (ProcessedOrderBookingsLock)
-                    {
-                        var orderIdString = shopifyOrder.id.ToString();
-                        ProcessedOrderBookings[orderIdString] = bookingResponse;
-                    }
-
-                    _logger.LogInformation("Successfully created Skypoint booking for Shopify order {OrderId}", shopifyOrder.id);
-                    return Ok(new {
-                        message = "Order processed successfully",
-                        shopifyOrderId = shopifyOrder.id,
-                        skypointBookingId = bookingResponse.Id,
-                        skypointTrackNo = bookingResponse.TrackNo,
-                        skypointStatus = bookingResponse.Status
-                    });
-                }
-                else
-                {
-                    _logger.LogError("Failed to create Skypoint booking for Shopify order {OrderId}", shopifyOrder.id);
-                    return StatusCode(500, new { error = "Failed to create Skypoint booking" });
-                }
+                return Accepted(new { message = "Webhook received and queued for background processing" });
             }
             catch (Exception ex)
             {
@@ -427,260 +336,155 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         /// Webhook endpoint for orders/updated
         /// </summary>
         [HttpPost("orders/updated")]
+        [ShopifyHmacValidation]
         public async Task<IActionResult> OrdersUpdated()
         {
             _logger.LogInformation("Order updated webhook received");
             
-            if (!await VerifyWebhookSignature())
+            try
             {
-                _logger.LogWarning("Invalid webhook signature");
-                return Unauthorized();
-            }
+                var body = await new StreamReader(Request.Body).ReadToEndAsync();
+                
+                var shop = Request.Headers["X-Shopify-Shop-Domain"].FirstOrDefault();
+                if (string.IsNullOrEmpty(shop))
+                {
+                    _logger.LogError("Webhook headers missing shop domain");
+                    return BadRequest(new { error = "Missing shop domain header" });
+                }
+                shop = NormalizeShopDomain(shop);
 
-            // TODO: Process order update
-            var body = await new StreamReader(Request.Body).ReadToEndAsync();
-            _logger.LogInformation("Order updated payload: {Body}", body);
-            
-            return Ok();
+                await _webhookQueue.QueueWebhookAsync(new WebhookJob
+                {
+                    ShopDomain = shop,
+                    Topic = "orders/updated",
+                    Payload = body
+                });
+
+                return Accepted(new { message = "Webhook received and queued for background processing" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing order updated webhook");
+                return StatusCode(500, new { error = "Internal server error" });
+            }
         }
 
         /// <summary>
         /// Webhook endpoint for orders/cancelled
         /// </summary>
         [HttpPost("orders/cancelled")]
+        [ShopifyHmacValidation]
         public async Task<IActionResult> OrdersCancelled()
         {
             _logger.LogInformation("Order cancelled webhook received");
             
-            if (!await VerifyWebhookSignature())
+            try
             {
-                _logger.LogWarning("Invalid webhook signature");
-                return Unauthorized();
-            }
+                var body = await new StreamReader(Request.Body).ReadToEndAsync();
+                
+                var shop = Request.Headers["X-Shopify-Shop-Domain"].FirstOrDefault();
+                if (string.IsNullOrEmpty(shop))
+                {
+                    _logger.LogError("Webhook headers missing shop domain");
+                    return BadRequest(new { error = "Missing shop domain header" });
+                }
+                shop = NormalizeShopDomain(shop);
 
-            // TODO: Process order cancellation
-            var body = await new StreamReader(Request.Body).ReadToEndAsync();
-            _logger.LogInformation("Order cancelled payload: {Body}", body);
-            
-            return Ok();
+                await _webhookQueue.QueueWebhookAsync(new WebhookJob
+                {
+                    ShopDomain = shop,
+                    Topic = "orders/cancelled",
+                    Payload = body
+                });
+
+                return Accepted(new { message = "Webhook received and queued for background processing" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing order cancelled webhook");
+                return StatusCode(500, new { error = "Internal server error" });
+            }
         }
 
         /// <summary>
         /// Webhook endpoint for app/uninstalled — removes the stored OAuth token for the shop.
         /// </summary>
         [HttpPost("app/uninstalled")]
+        [ShopifyHmacValidation]
         public async Task<IActionResult> AppUninstalled()
         {
             _logger.LogInformation("App uninstalled webhook received");
 
-            if (!await VerifyWebhookSignature())
+            try
             {
-                _logger.LogWarning("Invalid webhook signature");
-                return Unauthorized();
-            }
+                var body = await new StreamReader(Request.Body).ReadToEndAsync();
+                
+                var shop = Request.Headers["X-Shopify-Shop-Domain"].FirstOrDefault();
+                if (string.IsNullOrEmpty(shop))
+                {
+                    _logger.LogError("Webhook headers missing shop domain");
+                    return BadRequest(new { error = "Missing shop domain header" });
+                }
+                shop = NormalizeShopDomain(shop);
 
-            // Remove the stored token so the next install triggers a clean OAuth flow
-            var shopHeader = Request.Headers["X-Shopify-Shop-Domain"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(shopHeader))
+                await _webhookQueue.QueueWebhookAsync(new WebhookJob
+                {
+                    ShopDomain = shop,
+                    Topic = "app/uninstalled",
+                    Payload = body
+                });
+
+                return Accepted(new { message = "Webhook received and queued for background processing" });
+            }
+            catch (Exception ex)
             {
-                _shopTokenStore.RemoveToken(shopHeader);
-                _logger.LogInformation("Removed stored token for uninstalled shop: {Shop}", shopHeader);
+                _logger.LogError(ex, "Error processing app uninstalled webhook");
+                return StatusCode(500, new { error = "Internal server error" });
             }
+        }
 
-            var body = await new StreamReader(Request.Body).ReadToEndAsync();
-            _logger.LogDebug("App uninstalled payload: {Body}", body);
-
+        /// <summary>
+        /// GDPR Webhook: customers/redact
+        /// Called when a store owner requests deletion of customer personal data.
+        /// </summary>
+        [HttpPost("gdpr/customers/redact")]
+        [ShopifyHmacValidation]
+        public IActionResult CustomersRedact()
+        {
+            _logger.LogInformation(LogEventIds.WebhookReceived, "Shopify GDPR customers/redact request received.");
+            // Since this is a stateless/database-free plugin for customer records, we have no customer data to erase.
             return Ok();
         }
 
-
-        private async Task<bool> VerifyWebhookSignature()
+        /// <summary>
+        /// GDPR Webhook: customers/data_request
+        /// Called when a customer requests a copy of their stored personal data.
+        /// </summary>
+        [HttpPost("gdpr/customers/data_request")]
+        [ShopifyHmacValidation]
+        public IActionResult CustomersDataRequest()
         {
-            Request.Headers.TryGetValue("X-Shopify-Hmac-Sha256", out var signature);
-            
-            Request.EnableBuffering();
-            Request.Body.Position = 0;
-            using var reader = new StreamReader(Request.Body, leaveOpen: true);
-            var body = await reader.ReadToEndAsync();
-            Request.Body.Position = 0;
+            _logger.LogInformation(LogEventIds.WebhookReceived, "Shopify GDPR customers/data_request request received.");
+            // Return empty/standard acknowledgement since we do not store customer records.
+            return Ok();
+        }
 
-            var webhookSecret = _configuration["Shopify:WebhookSecret"];
-            if (string.IsNullOrEmpty(webhookSecret) || webhookSecret == "YOUR_WEBHOOK_SECRET")
-            {
-                _logger.LogWarning("Webhook secret not configured. Skipping signature validation for testing/development.");
-                return true;
-            }
-
-            if (string.IsNullOrEmpty(signature))
-            {
-                return false;
-            }
-
-            return _oauthService.VerifyWebhookSignature(body, signature.ToString(), webhookSecret);
+        /// <summary>
+        /// GDPR Webhook: shop/redact
+        /// Called when a store owner deletes their store or uninstalls the app.
+        /// </summary>
+        [HttpPost("gdpr/shop/redact")]
+        [ShopifyHmacValidation]
+        public IActionResult ShopRedact()
+        {
+            _logger.LogInformation(LogEventIds.WebhookReceived, "Shopify GDPR shop/redact request received.");
+            // Store token/settings cleanup is handled via the app/uninstalled webhook, so we just acknowledge here.
+            return Ok();
         }
 
         public static BookingRequest MapShopifyOrderToSkypointBooking(ShopifyOrderWebhook shopifyOrder, string skypointUserId, IConfiguration configuration)
         {
-            var shippingAddress = shopifyOrder.shipping_address;
-            var billingAddress = shopifyOrder.billing_address;
-            var customer = shopifyOrder.customer;
-            var pickupDate = shopifyOrder.created_at == default ? DateTime.UtcNow : shopifyOrder.created_at;
-            var customerEmail = FirstNonEmpty(customer?.email, shopifyOrder.email);
-            var dropOffPhone = FirstNonEmpty(shippingAddress?.phone, customer?.phone, " ");
-            var pickUpPhone = FirstNonEmpty(customer?.phone, shippingAddress?.phone, " ");
-            var parcelType = "A4_Text_Book";
-            var lineItems = shopifyOrder.line_items.Count > 0
-                ? shopifyOrder.line_items
-                : new List<ShopifyLineItem> { new() { sku = shopifyOrder.order_number.ToString(), quantity = 1 } };
-
-            // Map postal codes and suburbs to Skypoint-recognized values
-            var pickupPCode = MapPostalCode(FirstNonEmpty(billingAddress?.zip, " "), FirstNonEmpty(billingAddress?.city, " "), configuration);
-            var dropOffPCode = MapPostalCode(FirstNonEmpty(shippingAddress?.zip, " "), FirstNonEmpty(shippingAddress?.city, " "), configuration);
-            var fromSuburb = MapSuburb(FirstNonEmpty(billingAddress?.city, " "), pickupPCode, configuration);
-            var toSuburb = MapSuburb(FirstNonEmpty(shippingAddress?.city, " "), dropOffPCode, configuration);
-
-            return new BookingRequest
-            {
-                UserId = skypointUserId,
-                PickUpAddress = FirstNonEmpty(billingAddress?.address1, " "),
-                DropOffAddress = FirstNonEmpty(shippingAddress?.address1, " "),
-                FromSuburb = fromSuburb,
-                ToSuburb = toSuburb,
-                PickUpPCode = pickupPCode,
-                DropOffPCode = dropOffPCode,
-                Comment = $"@PickUp: Shopify Order #{shopifyOrder.order_number} @DropOff: No comment",
-                Province = FirstNonEmpty(billingAddress?.province, " "),
-                DestinationProvince = FirstNonEmpty(shippingAddress?.province, " "),
-                DropOff = new DropOffPerson
-                {
-                    FirstName = FirstNonEmpty(shippingAddress?.first_name, customer?.first_name, " "),
-                    LastName = FirstNonEmpty(shippingAddress?.last_name, customer?.last_name, " "),
-                    Phone = dropOffPhone,
-                    Email = customerEmail,
-                    Suburb = toSuburb,
-                    City = FirstNonEmpty(shippingAddress?.city, " "),
-                    State = FirstNonEmpty(shippingAddress?.province, " "),
-                    Zip = dropOffPCode
-                },
-                PickUp = new PickUpPerson
-                {
-                    FirstName = FirstNonEmpty(billingAddress?.first_name, customer?.first_name, " "),
-                    LastName = FirstNonEmpty(billingAddress?.last_name, customer?.last_name, " "),
-                    Phone = pickUpPhone,
-                    Email = customerEmail,
-                    Suburb = fromSuburb,
-                    City = FirstNonEmpty(billingAddress?.city, " "),
-                    State = FirstNonEmpty(billingAddress?.province, " "),
-                    Zip = pickupPCode
-                },
-                Type = "ROAD",
-                PickUpDate = pickupDate.ToString("dd"),
-                PickUpTime = pickupDate.ToString("HH:mm"),
-                ParcelDimensions = lineItems.Select(item => new ParcelDimension
-                {
-                    ParcelMass = 5.0,
-                    ParcelLength = 30.0,
-                    ParcelBreadth = 30.0,
-                    ParcelHeight = 23.0,
-                    PredefinedParcel = parcelType,
-                    ParcelReference = FirstNonEmpty(item.sku, item.title, shopifyOrder.order_number.ToString()),
-                    SelectedParcel = parcelType
-                }).ToList(),
-                PickUpCity = FirstNonEmpty(billingAddress?.city, " "),
-                DropOffCity = FirstNonEmpty(shippingAddress?.city, " "),
-                PickUpZip = FirstNonEmpty(billingAddress?.zip, " "),
-                DropOffZip = FirstNonEmpty(shippingAddress?.zip, " "),
-                ShipmentType = string.Empty,
-                ToCounterCode = string.Empty,
-                ToCounterName = string.Empty,
-                SaIdNumber = string.Empty,
-                PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty)
-            };
-        }
-
-        private static string FirstNonEmpty(params string?[] values)
-            => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
-
-        private static string MapPostalCode(string postalCode, string suburb, IConfiguration configuration)
-        {
-            var code = postalCode?.Trim() ?? string.Empty;
-
-            if (!string.IsNullOrEmpty(suburb))
-            {
-                var suburbKey = suburb.Replace(" ", "");
-                var mappedCode = configuration[$"Skypoint:PostalCodeMappings:{suburbKey}"];
-                if (!string.IsNullOrEmpty(mappedCode))
-                    return mappedCode;
-            }
-
-            if (code.StartsWith("2") || suburb?.Contains("Johannesburg", StringComparison.OrdinalIgnoreCase) == true)
-                return configuration["Skypoint:PostalCodeMappings:Johannesburg"] ?? "2000";
-
-            if (code.StartsWith("0") || suburb?.Contains("Pretoria", StringComparison.OrdinalIgnoreCase) == true)
-                return configuration["Skypoint:PostalCodeMappings:Pretoria"] ?? "0002";
-
-            if (code.StartsWith("7") || code.StartsWith("8") || suburb?.Contains("Cape Town", StringComparison.OrdinalIgnoreCase) == true)
-                return configuration["Skypoint:PostalCodeMappings:CapeTown"] ?? "8000";
-
-            if (code.StartsWith("4") || suburb?.Contains("Durban", StringComparison.OrdinalIgnoreCase) == true)
-                return configuration["Skypoint:PostalCodeMappings:Durban"] ?? "4001";
-
-            if (code.StartsWith("9") || suburb?.Contains("Bloemfontein", StringComparison.OrdinalIgnoreCase) == true)
-                return configuration["Skypoint:PostalCodeMappings:Bloemfontein"] ?? "9301";
-
-            if (code.StartsWith("6") || suburb?.Contains("Port Elizabeth", StringComparison.OrdinalIgnoreCase) == true)
-                return configuration["Skypoint:PostalCodeMappings:PortElizabeth"] ?? "6001";
-
-            return code;
-        }
-
-        private static string MapSuburb(string suburb, string postalCode, IConfiguration configuration)
-        {
-            var sub = suburb?.Trim() ?? string.Empty;
-
-            var suburbKey = sub.Replace(" ", "");
-            var mappedSuburb = configuration[$"Skypoint:SuburbMappings:{suburbKey}"];
-            if (!string.IsNullOrEmpty(mappedSuburb))
-                return mappedSuburb;
-
-            if (postalCode == "2000" || postalCode == configuration["Skypoint:PostalCodeMappings:Johannesburg"])
-            {
-                if (sub.Contains("Johannesburg", StringComparison.OrdinalIgnoreCase))
-                    return "Johannesburg";
-                if (sub.Contains("Germiston", StringComparison.OrdinalIgnoreCase))
-                    return configuration["Skypoint:SuburbMappings:Germiston"] ?? "Johannesburg";
-                return "Johannesburg";
-            }
-
-            if (postalCode == "0002" || postalCode == configuration["Skypoint:PostalCodeMappings:Pretoria"])
-            {
-                if (sub.Contains("Pretoria", StringComparison.OrdinalIgnoreCase))
-                    return "Pretoria";
-                return "Pretoria";
-            }
-
-            if (postalCode == "8000" || postalCode == configuration["Skypoint:PostalCodeMappings:CapeTown"])
-            {
-                if (sub.Contains("Cape Town", StringComparison.OrdinalIgnoreCase))
-                    return "Cape Town";
-                return "Cape Town";
-            }
-
-            if (postalCode == "4001" || postalCode == configuration["Skypoint:PostalCodeMappings:Durban"])
-            {
-                if (sub.Contains("Durban", StringComparison.OrdinalIgnoreCase))
-                    return "Durban";
-                return "Durban";
-            }
-
-            if (postalCode == "9301" || postalCode == configuration["Skypoint:PostalCodeMappings:Bloemfontein"])
-            {
-                if (sub.Contains("Bloemfontein", StringComparison.OrdinalIgnoreCase))
-                    return "Bloemfontein";
-                return "Bloemfontein";
-            }
-
-            return sub;
+            return SkypointOrderMapper.MapShopifyOrderToSkypointBooking(shopifyOrder, skypointUserId, configuration);
         }
     }
 }

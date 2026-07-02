@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.HttpOverrides;
 using SkypointShopifyPlugin.Infrastructure.DependencyInjection;
 using SkypointShopifyPlugin.Infrastructure.Services;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +27,33 @@ LoadAppConfig(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Configure JWT Authentication
+var encryptionKey = builder.Configuration["EncryptionKey"] ?? Environment.GetEnvironmentVariable("ENCRYPTION_KEY") ?? "SkypointShopifyPluginDefaultSecretKey32BytesForSigningTokens!";
+byte[] jwtKeyBytes;
+using (var sha256 = SHA256.Create())
+{
+    jwtKeyBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(encryptionKey));
+}
+var jwtSigningKey = new SymmetricSecurityKey(jwtKeyBytes);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = jwtSigningKey,
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero
+    };
+});
 
 // Add MediatR
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
@@ -51,7 +82,26 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Initialize Database and ensure schema exists on startup
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<SkypointShopifyPlugin.Infrastructure.Data.SkypointDbContext>();
+        context.Database.EnsureCreated();
+        Console.WriteLine("Database initialized successfully.");
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while initializing the database.");
+    }
+}
+
 // Configure the HTTP request pipeline
+app.UseMiddleware<SkypointShopifyPlugin.WebAPI.Middleware.ApiExceptionMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -77,6 +127,7 @@ app.UseStaticFiles(new StaticFileOptions
         }
     }
 });
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

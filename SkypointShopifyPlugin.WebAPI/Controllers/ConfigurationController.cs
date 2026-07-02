@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using SkypointShopifyPlugin.Core.DTOs.Configuration;
@@ -7,6 +8,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class ConfigurationController : ControllerBase
     {
         private readonly IConfigurationStore _configurationStore;
