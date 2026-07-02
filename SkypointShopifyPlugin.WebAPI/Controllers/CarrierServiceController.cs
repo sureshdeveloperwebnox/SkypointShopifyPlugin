@@ -190,16 +190,18 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 
                 var shopifyRates = new CarrierServiceResponse
                 {
-                    Rates = skypointRates.Select(rate => new ShippingRate
-                    {
-                        ServiceName = $"Skypoint {rate.ServiceName}",
-                        ServiceCode = rate.ServiceName,
-                        TotalPrice = (int)Math.Round(rate.Price * 100),
-                        Description = rate.ServiceDescription,
-                        Currency = typedRequest.CurrencyCode,
-                        MinDeliveryDate = DateTime.UtcNow.AddDays(rate.TransitDays).ToString("yyyy-MM-ddTHH:mm:ssZ"),
-                        MaxDeliveryDate = DateTime.UtcNow.AddDays(rate.TransitDays + 2).ToString("yyyy-MM-ddTHH:mm:ssZ")
-                    }).ToList()
+                    Rates = skypointRates
+                        .Where(rate => rate.Price > 0)
+                        .Select(rate => new ShippingRate
+                        {
+                            ServiceName = $"Skypoint {rate.ServiceName}",
+                            ServiceCode = rate.ServiceName,
+                            TotalPrice = (int)Math.Round(rate.Price * 100),
+                            Description = rate.ServiceDescription,
+                            Currency = typedRequest.CurrencyCode,
+                            MinDeliveryDate = DateTime.UtcNow.AddDays(rate.TransitDays).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                            MaxDeliveryDate = DateTime.UtcNow.AddDays(rate.TransitDays + 2).ToString("yyyy-MM-ddTHH:mm:ssZ")
+                        }).ToList()
                 };
 
                 _logger.LogInformation("Returning {Count} rates for shop {Shop}",
