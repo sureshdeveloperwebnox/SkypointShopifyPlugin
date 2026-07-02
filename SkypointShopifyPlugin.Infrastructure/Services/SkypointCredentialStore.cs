@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SkypointShopifyPlugin.Core.Interfaces;
-using SkypointShopifyPlugin.Infrastructure.Data;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
@@ -17,30 +14,86 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
     }
 
     /// <summary>
-    /// Database-backed Skypoint credential store.
-    /// Provides stateless credential management across server instances.
-    /// Includes a one-time migration for legacy file-based credentials.
+    /// File-based Skypoint credential store.
+    /// Provides credential persistence across server instances via skypoint_credentials.json.
+    /// Includes safe automatic restoration of previously migrated .migrated backups.
     /// </summary>
     public class SkypointCredentialStore : ISkypointCredentialStore
     {
-        private readonly IServiceScopeFactory _scopeFactory;
         private readonly IEncryptionService _encryptionService;
         private readonly ILogger<SkypointCredentialStore> _logger;
-        private readonly string _dataDirectory;
+        private readonly string _credsFile;
+        private readonly object _lock = new();
 
         public SkypointCredentialStore(
-            IServiceScopeFactory scopeFactory,
             IEncryptionService encryptionService,
             IOptions<SkypointCredentialStoreOptions> options,
             ILogger<SkypointCredentialStore> logger)
         {
-            _scopeFactory = scopeFactory;
             _encryptionService = encryptionService;
             _logger = logger;
-            _dataDirectory = options.Value.DataDirectory;
+            
+            var dataDir = options.Value.DataDirectory;
+            if (!Directory.Exists(dataDir))
+            {
+                Directory.CreateDirectory(dataDir);
+            }
+            
+            _credsFile = Path.Combine(dataDir, "skypoint_credentials.json");
+            var migratedFile = _credsFile + ".migrated";
+            
+            // Safe fallback: rename migrated file back if it exists and the active file does not
+            if (!File.Exists(_credsFile) && File.Exists(migratedFile))
+            {
+                try
+                {
+                    File.Move(migratedFile, _credsFile);
+                    _logger.LogInformation("Restored legacy skypoint_credentials.json from migrated file.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to restore migrated skypoint_credentials.json file");
+                }
+            }
+        }
 
-            // Perform one-time migration on startup
-            MigrateLegacyFiles();
+        private Dictionary<string, CredRecord> LoadAll()
+        {
+            lock (_lock)
+            {
+                if (!File.Exists(_credsFile))
+                {
+                    return new Dictionary<string, CredRecord>(StringComparer.OrdinalIgnoreCase);
+                }
+
+                try
+                {
+                    var json = File.ReadAllText(_credsFile);
+                    return JsonSerializer.Deserialize<Dictionary<string, CredRecord>>(json) 
+                           ?? new Dictionary<string, CredRecord>(StringComparer.OrdinalIgnoreCase);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to load skypoint credentials file.");
+                    return new Dictionary<string, CredRecord>(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+        }
+
+        private void SaveAll(Dictionary<string, CredRecord> creds)
+        {
+            lock (_lock)
+            {
+                try
+                {
+                    var json = JsonSerializer.Serialize(creds, new JsonSerializerOptions { WriteIndented = true });
+                    File.WriteAllText(_credsFile, json);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to save skypoint credentials file.");
+                }
+            }
         }
 
         public void Save(string shopDomain, string username, string password)
@@ -48,53 +101,26 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             shopDomain = Normalize(shopDomain);
             var (encPassword, iv) = _encryptionService.Encrypt(password);
 
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-            var entity = db.SkypointCredentials.FirstOrDefault(c => c.ShopDomain == shopDomain);
-            if (entity == null)
-            {
-                entity = new SkypointCredentialEntity
-                {
-                    ShopDomain = shopDomain,
-                    Username = username,
-                    EncryptedPassword = encPassword,
-                    Iv = iv,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                db.SkypointCredentials.Add(entity);
-            }
-            else
-            {
-                entity.Username = username;
-                entity.EncryptedPassword = encPassword;
-                entity.Iv = iv;
-                entity.UpdatedAt = DateTime.UtcNow;
-                db.SkypointCredentials.Update(entity);
-            }
-
-            db.SaveChanges();
-            _logger.LogInformation("Skypoint credentials saved in database for shop: {Shop}", shopDomain);
+            var creds = LoadAll();
+            creds[shopDomain] = new CredRecord(username, encPassword, iv);
+            SaveAll(creds);
+            _logger.LogInformation("Saved Skypoint credentials for shop: {Shop}", shopDomain);
         }
 
         public (string Username, string Password)? Get(string shopDomain)
         {
             shopDomain = Normalize(shopDomain);
+            var creds = LoadAll();
 
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-            var entity = db.SkypointCredentials.FirstOrDefault(c => c.ShopDomain == shopDomain);
-            if (entity == null)
+            if (!creds.TryGetValue(shopDomain, out var record))
             {
                 return null;
             }
 
             try
             {
-                var password = _encryptionService.Decrypt(entity.EncryptedPassword, entity.Iv);
-                return (entity.Username, password);
+                var password = _encryptionService.Decrypt(record.EncryptedPassword, record.IV);
+                return (record.Username, password);
             }
             catch (Exception ex)
             {
@@ -105,25 +131,18 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public IReadOnlyList<string> GetAllShops()
         {
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-            return db.SkypointCredentials.Select(c => c.ShopDomain).ToList();
+            var creds = LoadAll();
+            return new List<string>(creds.Keys);
         }
 
         public void Remove(string shopDomain)
         {
             shopDomain = Normalize(shopDomain);
-
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-            var entity = db.SkypointCredentials.FirstOrDefault(c => c.ShopDomain == shopDomain);
-            if (entity != null)
+            var creds = LoadAll();
+            if (creds.Remove(shopDomain))
             {
-                db.SkypointCredentials.Remove(entity);
-                db.SaveChanges();
-                _logger.LogInformation("Skypoint credentials removed from database for shop: {Shop}", shopDomain);
+                SaveAll(creds);
+                _logger.LogInformation("Removed Skypoint credentials for shop: {Shop}", shopDomain);
             }
         }
 
@@ -131,78 +150,6 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             => shop.Trim().ToLowerInvariant()
                    .Replace("https://", "").Replace("http://", "").TrimEnd('/');
 
-        private void MigrateLegacyFiles()
-        {
-            try
-            {
-                var legacyCredFile = Path.Combine(_dataDirectory, "skypoint_credentials.json");
-
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-                if (File.Exists(legacyCredFile))
-                {
-                    _logger.LogInformation("Found legacy credentials file: {Path}. Starting migration.", legacyCredFile);
-                    var json = File.ReadAllText(legacyCredFile);
-
-                    var keyFile = Path.Combine(_dataDirectory, "skypoint_key.bin");
-                    byte[]? oldKey = null;
-                    if (File.Exists(keyFile))
-                    {
-                        oldKey = File.ReadAllBytes(keyFile);
-                    }
-
-                    if (oldKey != null && oldKey.Length == 32)
-                    {
-                        var dict = JsonSerializer.Deserialize<Dictionary<string, LegacyCredRecord>>(json);
-                        if (dict != null)
-                        {
-                            using var aes = new System.Security.Cryptography.AesGcm(oldKey, 16);
-                            foreach (var (shop, record) in dict)
-                            {
-                                var normalized = Normalize(shop);
-                                try
-                                {
-                                    // Decrypt legacy record
-                                    var combined = Convert.FromBase64String(record.EncryptedPassword);
-                                    var ivBytes = Convert.FromBase64String(record.IV);
-                                    var ciphertext = combined[..^16];
-                                    var tag = combined[^16..];
-                                    var plaintextBytes = new byte[ciphertext.Length];
-                                    aes.Decrypt(ivBytes, ciphertext, tag, plaintextBytes);
-                                    var password = System.Text.Encoding.UTF8.GetString(plaintextBytes);
-
-                                    // Save to database
-                                    if (!db.SkypointCredentials.Any(c => c.ShopDomain == normalized))
-                                    {
-                                        var (newEncPassword, newIv) = _encryptionService.Encrypt(password);
-                                        db.SkypointCredentials.Add(new SkypointCredentialEntity
-                                        {
-                                            ShopDomain = normalized,
-                                            Username = record.Username,
-                                            EncryptedPassword = newEncPassword,
-                                            Iv = newIv
-                                        });
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogError(ex, "Failed to migrate credentials for {Shop} during decryption.", shop);
-                                }
-                            }
-                            db.SaveChanges();
-                        }
-                    }
-                    File.Move(legacyCredFile, legacyCredFile + ".migrated", overwrite: true);
-                    _logger.LogInformation("Legacy credentials migrated successfully.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating legacy Skypoint credentials to database.");
-            }
-        }
-
-        private record LegacyCredRecord(string Username, string EncryptedPassword, string IV);
+        private record CredRecord(string Username, string EncryptedPassword, string IV);
     }
 }

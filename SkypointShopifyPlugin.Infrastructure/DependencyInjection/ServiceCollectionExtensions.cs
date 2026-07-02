@@ -1,9 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SkypointShopifyPlugin.Core.Configuration;
 using SkypointShopifyPlugin.Core.Interfaces;
-using SkypointShopifyPlugin.Infrastructure.Data;
 using SkypointShopifyPlugin.Infrastructure.Services;
 
 namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
@@ -12,14 +10,6 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
         {
-            var connectionString = configuration.GetConnectionString("DefaultConnection") 
-                ?? "Data Source=data/skypoint_shopify.db";
-
-            services.AddDbContext<SkypointDbContext>(options =>
-            {
-                options.UseSqlite(connectionString);
-            });
-
             services.Configure<SkypointApiSettings>(options =>
             {
                 configuration.GetSection(SkypointApiSettings.SectionName).Bind(options);

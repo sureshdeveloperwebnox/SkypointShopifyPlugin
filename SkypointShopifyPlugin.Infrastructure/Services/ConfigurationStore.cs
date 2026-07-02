@@ -1,44 +1,55 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SkypointShopifyPlugin.Core.DTOs.Configuration;
 using SkypointShopifyPlugin.Core.Interfaces;
-using SkypointShopifyPlugin.Infrastructure.Data;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
     /// <summary>
-    /// Database-backed configuration store.
-    /// Saves application configuration to the database rather than a local JSON file.
-    /// Includes a one-time migration for legacy app_config.json files.
+    /// File-based configuration store.
+    /// Saves and loads application configuration from app_config.json in the data directory.
+    /// Includes safe automatic restoration of previously migrated .migrated backups.
     /// </summary>
     public class ConfigurationStore : IConfigurationStore
     {
-        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<ConfigurationStore> _logger;
         private readonly JsonSerializerOptions _jsonOptions;
-        private readonly string _legacyConfigPath;
+        private readonly string _configPath;
+        private readonly object _lock = new();
 
-        public ConfigurationStore(
-            IServiceScopeFactory scopeFactory,
-            ILogger<ConfigurationStore> logger)
+        public ConfigurationStore(ILogger<ConfigurationStore> logger)
         {
-            _scopeFactory = scopeFactory;
             _logger = logger;
-            _legacyConfigPath = Path.Combine(Directory.GetCurrentDirectory(), "data", "app_config.json");
+            var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "data");
+            if (!Directory.Exists(dataDirectory))
+            {
+                Directory.CreateDirectory(dataDirectory);
+            }
+            _configPath = Path.Combine(dataDirectory, "app_config.json");
+            var migratedConfigPath = _configPath + ".migrated";
+
+            // Safely restore previously migrated configuration if active configuration is missing
+            if (!File.Exists(_configPath) && File.Exists(migratedConfigPath))
+            {
+                try
+                {
+                    File.Move(migratedConfigPath, _configPath);
+                    _logger.LogInformation("Restored legacy app_config.json from migrated file.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to restore migrated configuration file: {Path}", migratedConfigPath);
+                }
+            }
             
             _jsonOptions = new JsonSerializerOptions
             {
                 WriteIndented = true,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             };
-
-            // Migrate legacy config file to database on startup
-            MigrateLegacyFile();
         }
 
         public async Task SaveConfigurationAsync(AppConfiguration config)
@@ -46,102 +57,49 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             try
             {
                 var json = JsonSerializer.Serialize(config, _jsonOptions);
-
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-                var entity = db.AppConfigurations.FirstOrDefault(c => c.Id == 1);
-                if (entity == null)
+                lock (_lock)
                 {
-                    entity = new AppConfigurationEntity
-                    {
-                        Id = 1,
-                        ConfigurationJson = json,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    db.AppConfigurations.Add(entity);
+                    File.WriteAllText(_configPath, json);
                 }
-                else
-                {
-                    entity.ConfigurationJson = json;
-                    entity.UpdatedAt = DateTime.UtcNow;
-                    db.AppConfigurations.Update(entity);
-                }
-
-                await db.SaveChangesAsync();
-                _logger.LogInformation("Configuration saved successfully to the database");
+                _logger.LogInformation("Configuration saved successfully to {Path}", _configPath);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to save configuration to the database");
+                _logger.LogError(ex, "Failed to save configuration to {Path}", _configPath);
                 throw;
             }
+            await Task.CompletedTask;
         }
 
         public async Task<AppConfiguration?> LoadConfigurationAsync()
         {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-                var entity = db.AppConfigurations.FirstOrDefault(c => c.Id == 1);
-                if (entity == null)
+                lock (_lock)
                 {
-                    _logger.LogInformation("Configuration not found in database.");
-                    return null;
+                    if (!File.Exists(_configPath))
+                    {
+                        _logger.LogInformation("Configuration not found at {Path}.", _configPath);
+                        return null;
+                    }
+                    var json = File.ReadAllText(_configPath);
+                    var config = JsonSerializer.Deserialize<AppConfiguration>(json, _jsonOptions);
+                    _logger.LogInformation("Configuration loaded successfully from {Path}", _configPath);
+                    return config;
                 }
-
-                var config = JsonSerializer.Deserialize<AppConfiguration>(entity.ConfigurationJson, _jsonOptions);
-                _logger.LogInformation("Configuration loaded successfully from the database");
-                return config;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to load configuration from the database");
+                _logger.LogError(ex, "Failed to load configuration from {Path}", _configPath);
                 return null;
             }
         }
 
         public bool ConfigurationExists()
         {
-            using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-            return db.AppConfigurations.Any(c => c.Id == 1);
-        }
-
-        private void MigrateLegacyFile()
-        {
-            try
+            lock (_lock)
             {
-                if (File.Exists(_legacyConfigPath))
-                {
-                    _logger.LogInformation("Found legacy configuration file: {Path}. Starting migration to database.", _legacyConfigPath);
-                    var json = File.ReadAllText(_legacyConfigPath);
-
-                    using var scope = _scopeFactory.CreateScope();
-                    var db = scope.ServiceProvider.GetRequiredService<SkypointDbContext>();
-
-                    var entity = db.AppConfigurations.FirstOrDefault(c => c.Id == 1);
-                    if (entity == null)
-                    {
-                        db.AppConfigurations.Add(new AppConfigurationEntity
-                        {
-                            Id = 1,
-                            ConfigurationJson = json,
-                            UpdatedAt = DateTime.UtcNow
-                        });
-                        db.SaveChanges();
-                        _logger.LogInformation("Legacy configuration successfully migrated to database.");
-                    }
-
-                    File.Move(_legacyConfigPath, _legacyConfigPath + ".migrated", overwrite: true);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error migrating legacy configuration file to database.");
+                return File.Exists(_configPath);
             }
         }
     }
