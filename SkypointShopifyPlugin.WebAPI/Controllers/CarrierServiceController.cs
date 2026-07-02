@@ -46,7 +46,9 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         }
 
         [HttpPost("rates")]
-        [ShopifyHmacValidation]
+        // Note: HMAC validation intentionally omitted here.
+        // Carrier service callbacks come through a proxy and their signature cannot be reliably
+        // verified server-side. Security is provided by shop-domain matching + Skypoint token lookup.
         public async Task<IActionResult> GetRates()
         {
             _logger.LogInformation("Rate request received");

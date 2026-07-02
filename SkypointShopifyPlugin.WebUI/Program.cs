@@ -50,6 +50,76 @@ app.Use(async (context, next) =>
     await next();
 });
 
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        var backendUrl = builder.Configuration["BackendApi:BaseUrl"] ?? "http://localhost:5126";
+        var targetUri = new Uri($"{backendUrl.TrimEnd('/')}{context.Request.Path}{context.Request.QueryString}");
+
+        using var client = new HttpClient();
+        
+        var requestMessage = new HttpRequestMessage(new HttpMethod(context.Request.Method), targetUri);
+        
+        // Copy request body
+        if (context.Request.ContentLength > 0 || context.Request.Headers.ContainsKey("Transfer-Encoding"))
+        {
+            var streamContent = new StreamContent(context.Request.Body);
+            requestMessage.Content = streamContent;
+            if (context.Request.ContentType != null)
+            {
+                streamContent.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(context.Request.ContentType);
+            }
+        }
+
+        // Copy request headers
+        foreach (var header in context.Request.Headers)
+        {
+            if (header.Key.StartsWith("Content-", StringComparison.OrdinalIgnoreCase))
+            {
+                if (requestMessage.Content != null)
+                {
+                    requestMessage.Content.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
+                }
+            }
+            else
+            {
+                requestMessage.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
+            }
+        }
+
+        try
+        {
+            var responseMessage = await client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead);
+            context.Response.StatusCode = (int)responseMessage.StatusCode;
+
+            // Copy response headers
+            foreach (var header in responseMessage.Headers)
+            {
+                context.Response.Headers[header.Key] = header.Value.ToArray();
+            }
+            foreach (var header in responseMessage.Content.Headers)
+            {
+                context.Response.Headers[header.Key] = header.Value.ToArray();
+            }
+            
+            // Remove transfer-encoding chunked to prevent conflicts
+            context.Response.Headers.Remove("transfer-encoding");
+
+            await responseMessage.Content.CopyToAsync(context.Response.Body);
+            return;
+        }
+        catch (Exception ex)
+        {
+            context.Response.StatusCode = StatusCodes.Status502BadGateway;
+            await context.Response.WriteAsync($"Error proxying request to backend API: {ex.Message}");
+            return;
+        }
+    }
+
+    await next();
+});
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

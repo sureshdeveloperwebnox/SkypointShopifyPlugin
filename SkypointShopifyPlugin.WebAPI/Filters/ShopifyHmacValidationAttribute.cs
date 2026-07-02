@@ -27,12 +27,7 @@ namespace SkypointShopifyPlugin.WebAPI.Filters
             var configuration = httpContext.RequestServices.GetRequiredService<IConfiguration>();
 
             var webhookSecret = configuration["Shopify:WebhookSecret"];
-            if (string.IsNullOrEmpty(webhookSecret) || webhookSecret == "YOUR_WEBHOOK_SECRET")
-            {
-                logger.LogWarning(LogEventIds.TokenValidationBypassed, "Shopify WebhookSecret is not configured. Skipping signature validation (Development/Test Mode).");
-                await next();
-                return;
-            }
+            var clientSecret  = configuration["Shopify:ClientSecret"];
 
             if (!httpContext.Request.Headers.TryGetValue("X-Shopify-Hmac-Sha256", out var signatureHeader))
             {
@@ -58,33 +53,62 @@ namespace SkypointShopifyPlugin.WebAPI.Filters
             {
                 body = await reader.ReadToEndAsync();
             }
-            
+
             // Reset position so model binding can parse body after filter execution
             httpContext.Request.Body.Position = 0;
 
-            // Compute HMAC hash
-            var secretBytes = Encoding.UTF8.GetBytes(webhookSecret);
-            var bodyBytes = Encoding.UTF8.GetBytes(body);
-
-            using var hmac = new HMACSHA256(secretBytes);
-            var hashBytes = hmac.ComputeHash(bodyBytes);
-
+            byte[] signatureBytes;
             try
             {
-                var signatureBytes = Convert.FromBase64String(signature);
-                if (CryptographicOperations.FixedTimeEquals(signatureBytes, hashBytes))
+                signatureBytes = Convert.FromBase64String(signature);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(LogEventIds.HmacValidationFailure, ex, "Error parsing signature bytes: {Signature}", signature);
+                context.Result = new UnauthorizedResult();
+                return;
+            }
+
+            var bodyBytes = Encoding.UTF8.GetBytes(body);
+            bool hasValidSecret = false;
+
+            // 1. Try ClientSecret — Shopify signs carrier service rate requests with the app's Client Secret
+            if (!string.IsNullOrEmpty(clientSecret) && clientSecret != "YOUR_CLIENT_SECRET")
+            {
+                hasValidSecret = true;
+                using var hmacClient = new HMACSHA256(Encoding.UTF8.GetBytes(clientSecret));
+                var hashClient = hmacClient.ComputeHash(bodyBytes);
+                if (CryptographicOperations.FixedTimeEquals(signatureBytes, hashClient))
                 {
-                    logger.LogInformation(LogEventIds.HmacValidationSuccess, "Shopify HMAC verification succeeded.");
+                    logger.LogInformation(LogEventIds.HmacValidationSuccess, "Shopify HMAC verification succeeded using ClientSecret.");
                     await next();
                     return;
                 }
             }
-            catch (Exception ex)
+
+            // 2. Try WebhookSecret — used for standard app webhooks
+            if (!string.IsNullOrEmpty(webhookSecret) && webhookSecret != "YOUR_WEBHOOK_SECRET")
             {
-                logger.LogError(LogEventIds.HmacValidationFailure, ex, "Error occurred during signature bytes parsing: {Signature}", signature);
+                hasValidSecret = true;
+                using var hmacWebhook = new HMACSHA256(Encoding.UTF8.GetBytes(webhookSecret));
+                var hashWebhook = hmacWebhook.ComputeHash(bodyBytes);
+                if (CryptographicOperations.FixedTimeEquals(signatureBytes, hashWebhook))
+                {
+                    logger.LogInformation(LogEventIds.HmacValidationSuccess, "Shopify HMAC verification succeeded using WebhookSecret.");
+                    await next();
+                    return;
+                }
             }
 
-            logger.LogWarning(LogEventIds.HmacValidationFailure, "Rejected request: Shopify HMAC verification failed.");
+            // If no secrets are configured at all, allow in dev/test mode
+            if (!hasValidSecret)
+            {
+                logger.LogWarning(LogEventIds.TokenValidationBypassed, "No Shopify secrets configured. Skipping validation (Development/Test Mode).");
+                await next();
+                return;
+            }
+
+            logger.LogWarning(LogEventIds.HmacValidationFailure, "Rejected request: Shopify HMAC verification failed against both ClientSecret and WebhookSecret.");
             context.Result = new UnauthorizedResult();
         }
     }
