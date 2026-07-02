@@ -240,6 +240,10 @@
               "target": "Package",
               "version": "[10.0.9, )"
             },
+            "Npgsql.EntityFrameworkCore.PostgreSQL": {
+              "target": "Package",
+              "version": "[9.0.3, )"
+            },
             "Polly": {
               "target": "Package",
               "version": "[8.4.1, )"
@@ -335,6 +339,10 @@
             "Microsoft.OpenApi": {
               "target": "Package",
               "version": "[1.6.22, )"
+            },
+            "Npgsql.EntityFrameworkCore.PostgreSQL": {
+              "target": "Package",
+              "version": "[9.0.3, )"
             },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
