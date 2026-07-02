@@ -85,7 +85,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
 
             // 2. Fallback: load or create key file in the data directory
-            var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
+            var dataDir = Path.Combine(Directory.GetCurrentDirectory(), "data");
             if (!Directory.Exists(dataDir))
             {
                 Directory.CreateDirectory(dataDir);

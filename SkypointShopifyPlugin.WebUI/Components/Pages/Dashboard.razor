@@ -145,7 +145,12 @@
 
         try
         {
-            var response = await Http.GetAsync($"api/shopify/setup?shop={Uri.EscapeDataString(Shop!)}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/shopify/setup?shop={Uri.EscapeDataString(Shop!)}");
+            if (!string.IsNullOrEmpty(token))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+            var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
                 var data = await response.Content.ReadFromJsonAsync<CarrierSetupResponse>();

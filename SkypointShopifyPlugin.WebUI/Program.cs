@@ -22,15 +22,17 @@ builder.Services.AddAntiforgery(options =>
 // Register the authorization handler
 builder.Services.AddTransient<SkypointShopifyPlugin.WebUI.Handlers.TokenAuthorizationHandler>();
 
-// Register HttpClient to communicate with WebAPI with automatic JWT injection
-builder.Services.AddHttpClient("BackendApi", client =>
+// Register the scoped HttpClient directly, bypassing IHttpClientFactory to preserve circuit scope for ProtectedSessionStorage
+builder.Services.AddScoped(sp =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["BackendApi:BaseUrl"] ?? "http://localhost:5126");
-})
-.AddHttpMessageHandler<SkypointShopifyPlugin.WebUI.Handlers.TokenAuthorizationHandler>();
+    var handler = sp.GetRequiredService<SkypointShopifyPlugin.WebUI.Handlers.TokenAuthorizationHandler>();
+    handler.InnerHandler = new HttpClientHandler();
 
-// Register the scoped HttpClient resolved from HttpClientFactory so components get the configured instance
-builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("BackendApi"));
+    return new HttpClient(handler)
+    {
+        BaseAddress = new Uri(builder.Configuration["BackendApi:BaseUrl"] ?? "http://localhost:5126")
+    };
+});
 
 var app = builder.Build();
 

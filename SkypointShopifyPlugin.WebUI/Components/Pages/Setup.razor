@@ -143,6 +143,7 @@
     private bool isSaving = false;
     private string? successMessage;
     private string? errorMessage;
+    private string? token;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -159,6 +160,7 @@
                     return;
                 }
 
+                token = tokenResult.Value;
                 await LoadConfiguration();
             }
             catch
@@ -172,7 +174,20 @@
     {
         try
         {
-            config = await Http.GetFromJsonAsync<AppConfiguration>("api/configuration") ?? new();
+            using var request = new HttpRequestMessage(HttpMethod.Get, "api/configuration");
+            if (!string.IsNullOrEmpty(token))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                config = await response.Content.ReadFromJsonAsync<AppConfiguration>() ?? new();
+            }
+            else
+            {
+                errorMessage = $"Failed to load configuration: {response.ReasonPhrase}";
+            }
             isLoaded = true;
             StateHasChanged();
         }
@@ -193,10 +208,18 @@
 
         try
         {
-            var response = await Http.PostAsJsonAsync("api/configuration", config);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/configuration")
+            {
+                Content = JsonContent.Create(config)
+            };
+            if (!string.IsNullOrEmpty(token))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+            var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                successMessage = "Your configuration has been saved to the database. It is now active and applied.";
+                successMessage = "Your configuration has been saved. It is now active and applied.";
             }
             else
             {

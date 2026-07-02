@@ -10,7 +10,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 {
     public class SkypointCredentialStoreOptions
     {
-        public string DataDirectory { get; set; } = Path.Combine(AppContext.BaseDirectory, "data");
+        public string DataDirectory { get; set; } = Path.Combine(Directory.GetCurrentDirectory(), "data");
     }
 
     /// <summary>
