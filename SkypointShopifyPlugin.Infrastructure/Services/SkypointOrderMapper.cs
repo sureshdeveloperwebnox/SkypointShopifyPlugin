@@ -84,8 +84,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 PickUpZip = FirstNonEmpty(billingAddress?.Zip, " "),
                 DropOffZip = FirstNonEmpty(shippingAddress?.Zip, " "),
                 ShipmentType = string.Empty,
-                ToCounterCode = string.Empty,
-                ToCounterName = string.Empty,
+                ToCounterCode = FirstNonEmpty(order.ToCounterCode, string.Empty),
+                ToCounterName = FirstNonEmpty(order.ToCounterName, string.Empty),
                 SaIdNumber = string.Empty,
                 PickUpCountry = FirstNonEmpty(billingAddress?.Country, string.Empty)
             };
@@ -192,8 +192,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 PickUpZip = FirstNonEmpty(billingAddress?.zip, " "),
                 DropOffZip = FirstNonEmpty(shippingAddress?.zip, " "),
                 ShipmentType = string.Empty,
-                ToCounterCode = string.Empty,
-                ToCounterName = string.Empty,
+                ToCounterCode = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_code", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_code", StringComparison.OrdinalIgnoreCase))?.value ?? string.Empty,
+                ToCounterName = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_name", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_name", StringComparison.OrdinalIgnoreCase))?.value ?? string.Empty,
                 SaIdNumber = string.Empty,
                 PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty)
             };
@@ -209,6 +209,77 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             order.SkypointStatus = bookingResponse.Status;
             order.Status = "processing";
             order.UpdatedAt = DateTime.UtcNow;
+        }
+
+        public static SkypointOrder MapShopifyOrderToSkypointOrder(ShopifyOrderWebhook shopifyOrder, string shopDomain)
+        {
+            // Extract PUDO note attributes if present
+            var toCounterCode = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_code", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_code", StringComparison.OrdinalIgnoreCase))?.value;
+            var toCounterName = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_name", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_name", StringComparison.OrdinalIgnoreCase))?.value;
+            var pudoAddr1 = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_addr1", StringComparison.OrdinalIgnoreCase))?.value;
+            var pudoCity = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_city", StringComparison.OrdinalIgnoreCase))?.value;
+            var pudoZip = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_zip", StringComparison.OrdinalIgnoreCase))?.value;
+            var pudoProvider = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_provider", StringComparison.OrdinalIgnoreCase))?.value;
+
+            return new SkypointOrder
+            {
+                Id = shopifyOrder.id.ToString(),
+                OrderNumber = shopifyOrder.order_number.ToString(),
+                CreatedAt = shopifyOrder.created_at == default ? DateTime.UtcNow : shopifyOrder.created_at,
+                UpdatedAt = shopifyOrder.updated_at == default ? DateTime.UtcNow : shopifyOrder.updated_at,
+                FinancialStatus = shopifyOrder.financial_status,
+                FulfillmentStatus = shopifyOrder.fulfillment_status,
+                TotalPrice = shopifyOrder.total_price,
+                Currency = shopifyOrder.currency,
+                Status = "pending",
+                OrderSource = "shopify",
+                VendorId = shopDomain,
+                ToCounterCode = toCounterCode,
+                ToCounterName = toCounterName,
+                PudoAddress1 = pudoAddr1,
+                PudoCity = pudoCity,
+                PudoZip = pudoZip,
+                PudoProvider = pudoProvider,
+                Customer = shopifyOrder.customer == null ? null : new SkypointCustomer
+                {
+                    Id = shopifyOrder.customer.id.ToString(),
+                    Email = shopifyOrder.customer.email,
+                    FirstName = shopifyOrder.customer.first_name,
+                    LastName = shopifyOrder.customer.last_name,
+                    Phone = shopifyOrder.customer.phone
+                },
+                LineItems = shopifyOrder.line_items.Select(item => new SkypointOrderItem
+                {
+                    Id = item.id.ToString(),
+                    Title = item.title,
+                    Quantity = item.quantity,
+                    Price = item.price,
+                    Sku = item.sku
+                }).ToList(),
+                ShippingAddress = shopifyOrder.shipping_address == null ? null : new SkypointAddress
+                {
+                    FirstName = shopifyOrder.shipping_address.first_name,
+                    LastName = shopifyOrder.shipping_address.last_name,
+                    Address1 = shopifyOrder.shipping_address.address1,
+                    Address2 = shopifyOrder.shipping_address.address2,
+                    City = shopifyOrder.shipping_address.city,
+                    Province = shopifyOrder.shipping_address.province,
+                    Country = shopifyOrder.shipping_address.country,
+                    Zip = shopifyOrder.shipping_address.zip,
+                    Phone = shopifyOrder.shipping_address.phone
+                },
+                BillingAddress = shopifyOrder.billing_address == null ? null : new SkypointAddress
+                {
+                    FirstName = shopifyOrder.billing_address.first_name,
+                    LastName = shopifyOrder.billing_address.last_name,
+                    Address1 = shopifyOrder.billing_address.address1,
+                    Address2 = shopifyOrder.billing_address.address2,
+                    City = shopifyOrder.billing_address.city,
+                    Province = shopifyOrder.billing_address.province,
+                    Country = shopifyOrder.billing_address.country,
+                    Zip = shopifyOrder.billing_address.zip
+                }
+            };
         }
 
         private static string FirstNonEmpty(params string?[] values)

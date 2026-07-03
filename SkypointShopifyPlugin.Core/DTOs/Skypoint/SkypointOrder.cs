@@ -24,6 +24,17 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         public string? SkypointStatus { get; set; }
         public string OrderSource { get; set; } = "skypoint"; // skypoint, shopify, woocommerce
         public string? VendorId { get; set; }
+
+        // PUDO Counter Selection properties
+        public string? ToCounterCode { get; set; }
+        public string? ToCounterName { get; set; }
+        public string? PudoAddress1 { get; set; }
+        public string? PudoCity { get; set; }
+        public string? PudoZip { get; set; }
+        public string? PudoProvider { get; set; }
+
+        // Tracking History Event logs
+        public List<TrackingEventDto> TrackingHistory { get; set; } = new();
     }
 
     public class SkypointCustomer

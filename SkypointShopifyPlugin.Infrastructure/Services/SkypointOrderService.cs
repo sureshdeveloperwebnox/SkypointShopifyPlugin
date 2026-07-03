@@ -15,17 +15,20 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         private readonly ISkypointOrderStore _orderStore;
         private readonly ISkypointApiClient _skypointApiClient;
         private readonly ISkypointTokenStore _skypointTokenStore;
+        private readonly IEcommercePlatformService _ecommercePlatformService;
 
         public SkypointOrderService(
             ILogger<SkypointOrderService> logger,
             ISkypointOrderStore orderStore,
             ISkypointApiClient skypointApiClient,
-            ISkypointTokenStore skypointTokenStore)
+            ISkypointTokenStore skypointTokenStore,
+            IEcommercePlatformService ecommercePlatformService)
         {
             _logger = logger;
             _orderStore = orderStore;
             _skypointApiClient = skypointApiClient;
             _skypointTokenStore = skypointTokenStore;
+            _ecommercePlatformService = ecommercePlatformService;
         }
 
         public async Task<SkypointOrderResponse> CreateOrderAsync(CreateSkypointOrderRequest request, bool autoProcess = true)
@@ -289,16 +292,76 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             try
             {
                 var order = await _orderStore.GetOrderByIdAsync(orderId);
-                if (order == null || string.IsNullOrEmpty(order.SkypointBookingId))
+                if (order == null || (string.IsNullOrEmpty(order.SkypointTrackNo) && string.IsNullOrEmpty(order.SkypointBookingId)))
                 {
-                    _logger.LogWarning("Cannot sync status for order {OrderId} - not found or no booking", orderId);
+                    _logger.LogWarning("Cannot sync status for order {OrderId} - not found, or has no booking ID or track number", orderId);
                     return false;
                 }
 
-                // TODO: Implement status sync with Skypoint API
-                // This would require a new API method to get booking status
-                _logger.LogInformation("Status sync for order {OrderId} not yet implemented", orderId);
-                return false;
+                var trackNo = !string.IsNullOrEmpty(order.SkypointTrackNo) ? order.SkypointTrackNo : order.SkypointBookingId!;
+                var vendorId = order.VendorId ?? "default";
+                var token = _skypointTokenStore.GetToken(vendorId);
+
+                if (string.IsNullOrEmpty(token))
+                {
+                    _logger.LogError("SkyPoint API credentials/token not configured for vendor {VendorId} when syncing order {OrderId}", vendorId, orderId);
+                    return false;
+                }
+
+                // Query tracking info from SkyPoint
+                var trackingResponse = await _skypointApiClient.TrackBookingAsync(trackNo, token);
+                if (trackingResponse == null || trackingResponse.TrackingInfo == null || trackingResponse.TrackingInfo.Count == 0)
+                {
+                    _logger.LogWarning("No tracking events found for waybill {TrackNo} of order {OrderId}", trackNo, orderId);
+                    return false;
+                }
+
+                // Update order tracking history
+                order.TrackingHistory = trackingResponse.TrackingInfo;
+
+                // Determine latest status based on the first event in the list (newest first)
+                var latestEvent = trackingResponse.TrackingInfo.FirstOrDefault();
+                if (latestEvent != null)
+                {
+                    var oldStatus = order.SkypointStatus;
+                    order.SkypointStatus = latestEvent.WaybillEventDescription;
+
+                    // Map specific descriptions to order status
+                    if (latestEvent.WaybillEventDescription.Equals("Admin POD", StringComparison.OrdinalIgnoreCase))
+                    {
+                        order.Status = "completed";
+                        order.FulfillmentStatus = "fulfilled";
+                    }
+                    else if (latestEvent.WaybillEventDescription.Equals("Collection Cancelled", StringComparison.OrdinalIgnoreCase))
+                    {
+                        order.Status = "cancelled";
+                    }
+                    else
+                    {
+                        order.Status = "processing";
+                    }
+
+                    order.UpdatedAt = DateTime.UtcNow;
+                    await _orderStore.UpdateOrderAsync(order);
+
+                    _logger.LogInformation("Synced order {OrderId} status: {OldStatus} -> {NewStatus}", orderId, oldStatus, order.SkypointStatus);
+
+                    // Push update to platform (e.g. Shopify/WooCommerce) if order source matches
+                    if (order.OrderSource == "shopify")
+                    {
+                        var trackingUrl = $"https://skypoint.online/track/{trackNo}"; // SkyPoint public track URL
+                        await _ecommercePlatformService.UpdateTrackingAsync(
+                            order.VendorId ?? string.Empty,
+                            order.Id,
+                            trackNo,
+                            "SkyPoint",
+                            trackingUrl,
+                            latestEvent.WaybillEventDescription
+                        );
+                    }
+                }
+
+                return true;
             }
             catch (Exception ex)
             {

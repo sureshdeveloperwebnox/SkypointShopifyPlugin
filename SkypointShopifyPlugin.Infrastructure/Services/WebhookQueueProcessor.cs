@@ -71,7 +71,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
             if (job.Topic.Equals("orders/create", StringComparison.OrdinalIgnoreCase))
             {
-                await ProcessOrderCreateAsync(job, tokenStore, apiClient, configuration, logger, ct);
+                var orderStore = sp.GetRequiredService<ISkypointOrderStore>();
+                await ProcessOrderCreateAsync(job, tokenStore, apiClient, orderStore, configuration, logger, ct);
             }
             else if (job.Topic.Equals("orders/updated", StringComparison.OrdinalIgnoreCase))
             {
@@ -92,6 +93,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             WebhookJob job, 
             ISkypointTokenStore tokenStore, 
             ISkypointApiClient apiClient, 
+            ISkypointOrderStore orderStore,
             IConfiguration configuration,
             ILogger logger,
             CancellationToken ct)
@@ -155,6 +157,12 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 {
                     _webhookQueue.ProcessedOrderBookings[orderIdString] = bookingResponse;
                     logger.LogInformation(LogEventIds.WebhookProcessed, "Successfully created background Skypoint booking for Shopify order {OrderId}", shopifyOrder.id);
+
+                    // Save order to store for tracking/sync
+                    var skypointOrder = SkypointOrderMapper.MapShopifyOrderToSkypointOrder(shopifyOrder, shop);
+                    SkypointOrderMapper.UpdateWithBookingResponse(skypointOrder, bookingResponse);
+                    await orderStore.SaveOrderAsync(skypointOrder);
+                    logger.LogInformation("Saved booked Shopify order {OrderId} to SkypointOrderStore.", shopifyOrder.id);
                 }
             }
             catch (Exception ex)

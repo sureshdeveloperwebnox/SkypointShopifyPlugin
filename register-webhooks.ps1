@@ -2,9 +2,9 @@
 # This script uses the built-in webhook sync endpoint to register webhooks
 
 # Configuration
-$ShopDomain = "suresh-dev-store-2.myshopify.com"  # Change to your store domain
-$PublicBaseUrl = "https://eboni-unprizable-discriminatingly.ngrok-free.dev"  # Your ngrok URL
-$ApiBaseUrl = "http://localhost:5000"  # Your local API URL
+$ShopDomain = "deeprintztestapp.myshopify.com"  # Change to your store domain
+$PublicBaseUrl = "https://29c1-42-104-201-2.ngrok-free.app"  # Your WebAPI ngrok URL
+$ApiBaseUrl = "http://localhost:5126"  # Your local WebAPI port
 
 Write-Host "Syncing webhooks for shop: $ShopDomain" -ForegroundColor Cyan
 Write-Host "Base URL: $PublicBaseUrl" -ForegroundColor Cyan

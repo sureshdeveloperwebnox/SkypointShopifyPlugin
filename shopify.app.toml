@@ -3,17 +3,18 @@
 client_id = "43cc9e72087b61c72649cbabcd052072"
 name = "Skypoint Shipping"
 handle = "skypoint-shipping"
-application_url = "https://fef0-223-185-23-101.ngrok-free.app"
+application_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev"
 embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
 
 [access_scopes]
-scopes = "read_orders,write_orders,read_products,write_products,read_shipping,write_shipping,read_fulfillments,write_fulfillments"
+scopes = "read_orders,write_orders,read_products,write_products,read_shipping,write_shipping,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
 
 [auth]
 redirect_urls = [
+  "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/auth",
   "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/auth"
 ]
 
@@ -22,21 +23,21 @@ api_version = "2024-04"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/create" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/create"
+  uri = "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/orders/create"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/updated" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/updated"
+  uri = "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/orders/updated"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/cancelled" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/cancelled"
+  uri = "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/orders/cancelled"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/app/uninstalled"
+  uri = "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/app/uninstalled"
 
 [webhooks.privacy_compliance]
-customer_deletion_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/customers/redact"
-customer_data_request_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/customers/data_request"
-shop_deletion_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/shop/redact"
+customer_deletion_url = "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/customers/redact"
+customer_data_request_url = "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/customers/data_request"
+aftershop_deletion_url = "https://29c1-42-104-201-2.ngrok-free.app/api/shopify/shop/redact"

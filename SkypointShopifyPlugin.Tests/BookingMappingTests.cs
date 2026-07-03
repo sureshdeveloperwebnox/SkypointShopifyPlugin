@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using SkypointShopifyPlugin.Core.DTOs.Shopify;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.WebAPI.Controllers;
+using SkypointShopifyPlugin.Infrastructure.Services;
 using Xunit;
 
 namespace SkypointShopifyPlugin.Tests
@@ -162,6 +163,64 @@ namespace SkypointShopifyPlugin.Tests
             Assert.True(root.TryGetProperty("dropOffzip", out var dropOffZipProp));
             Assert.False(root.TryGetProperty("dropOffZip", out _));
             Assert.Equal("9301", dropOffZipProp.GetString());
+        }
+
+        [Fact]
+        public void MapShopifyOrderToSkypointOrder_MapsPudoFieldsCorrectly()
+        {
+            // Arrange
+            var shopifyOrder = new ShopifyOrderWebhook
+            {
+                id = 123456789L,
+                order_number = 108726L,
+                created_at = new DateTime(2026, 6, 26, 13, 11, 0, DateTimeKind.Utc),
+                financial_status = "paid",
+                fulfillment_status = "unfulfilled",
+                total_price = 105.00m,
+                currency = "ZAR",
+                note_attributes = new List<ShopifyNoteAttribute>
+                {
+                    new() { name = "pudo_code", value = "PUDO-123" },
+                    new() { name = "pudo_name", value = "Lakeside Mall Counter" },
+                    new() { name = "pudo_addr1", value = "12 Lakeside Road" },
+                    new() { name = "pudo_city", value = "Benoni" },
+                    new() { name = "pudo_zip", value = "1501" },
+                    new() { name = "pudo_provider", value = "Pudo" }
+                },
+                line_items = new List<ShopifyLineItem>
+                {
+                    new ShopifyLineItem
+                    {
+                        id = 9991L,
+                        sku = "A4_Text_Book",
+                        title = "Textbook A",
+                        quantity = 1,
+                        price = 105.00m
+                    }
+                }
+            };
+
+            // Act
+            var order = SkypointOrderMapper.MapShopifyOrderToSkypointOrder(shopifyOrder, "test-store.myshopify.com");
+
+            // Assert
+            Assert.Equal("123456789", order.Id);
+            Assert.Equal("108726", order.OrderNumber);
+            Assert.Equal("test-store.myshopify.com", order.VendorId);
+            Assert.Equal("shopify", order.OrderSource);
+            Assert.Equal("PUDO-123", order.ToCounterCode);
+            Assert.Equal("Lakeside Mall Counter", order.ToCounterName);
+            Assert.Equal("12 Lakeside Road", order.PudoAddress1);
+            Assert.Equal("Benoni", order.PudoCity);
+            Assert.Equal("1501", order.PudoZip);
+            Assert.Equal("Pudo", order.PudoProvider);
+            
+            Assert.Single(order.LineItems);
+            Assert.Equal("9991", order.LineItems[0].Id);
+            Assert.Equal("Textbook A", order.LineItems[0].Title);
+            Assert.Equal("A4_Text_Book", order.LineItems[0].Sku);
+            Assert.Equal(1, order.LineItems[0].Quantity);
+            Assert.Equal(105.00m, order.LineItems[0].Price);
         }
     }
 }

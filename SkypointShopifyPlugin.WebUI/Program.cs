@@ -1,4 +1,5 @@
 using SkypointShopifyPlugin.WebUI.Components;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,11 @@ builder.Services.AddScoped(sp =>
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+});
 
 // Middleware to strip X-Frame-Options and configure Content-Security-Policy to allow Shopify framing
 app.Use(async (context, next) =>

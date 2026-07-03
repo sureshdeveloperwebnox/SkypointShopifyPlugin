@@ -6,5 +6,6 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         Task<(bool success, string message)> RegisterAndAssignCarrierServiceAsync(string shopDomain, string accessToken, string carrierServiceUrl);
         Task<(bool success, string message)> SyncWebhooksAsync(string shopDomain, string accessToken, string publicBaseUrl);
         Task<string> GetOrdersJsonAsync(string shopDomain, string accessToken, DateTime? since = null);
+        Task<bool> UpdateOrderTrackingAsync(string shopDomain, string accessToken, string shopifyOrderId, string trackNo, string carrierName, string trackingUrl);
     }
 }

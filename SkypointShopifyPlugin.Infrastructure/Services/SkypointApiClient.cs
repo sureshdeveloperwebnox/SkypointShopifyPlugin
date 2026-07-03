@@ -172,5 +172,55 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 return result!;
             });
         }
+
+        public async Task<TrackingResponse> TrackBookingAsync(string trackNo, string authToken)
+        {
+            var url = _settings.GetTrackingUrl(trackNo);
+            _logger.LogInformation("Tracking request to {Url}", url);
+
+            return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
+            {
+                var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+                httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
+
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Tracking API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                    throw new HttpRequestException($"Skypoint Tracking API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
+                }
+
+                var result = JsonSerializer.Deserialize<TrackingResponse>(responseBody, _jsonOptions);
+                _logger.LogInformation("Retrieved tracking information for {TrackNo}. Events count: {Count}", trackNo, result?.TrackingInfo?.Count ?? 0);
+                return result ?? new TrackingResponse();
+            });
+        }
+
+        public async Task<PudoPointResponse> GetSelectedPudoPointAsync(string guid, string authToken)
+        {
+            var url = _settings.GetPudoSelectedUrl(guid);
+            _logger.LogInformation("Selected PUDO point request to {Url}", url);
+
+            return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
+            {
+                var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+                httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
+
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Selected PUDO Point API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                    throw new HttpRequestException($"Skypoint Selected PUDO API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
+                }
+
+                var result = JsonSerializer.Deserialize<PudoPointResponse>(responseBody, _jsonOptions);
+                _logger.LogInformation("Retrieved selected PUDO point for {Guid}: {Code} - {Name}", guid, result?.Code, result?.Name);
+                return result!;
+            });
+        }
     }
 }

@@ -437,5 +437,144 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 return "[]";
             }
         }
+
+        public async Task<bool> UpdateOrderTrackingAsync(string shopDomain, string accessToken, string shopifyOrderId, string trackNo, string carrierName, string trackingUrl)
+        {
+            try
+            {
+                _logger.LogInformation("Updating tracking using GraphQL for Shopify Order: {OrderId} with trackNo: {TrackNo}", shopifyOrderId, trackNo);
+
+                var graphqlUrl = $"https://{shopDomain}/admin/api/2024-01/graphql.json";
+                
+                // Formulate the order GID
+                var orderGid = shopifyOrderId.StartsWith("gid://") 
+                    ? shopifyOrderId 
+                    : $"gid://shopify/Order/{shopifyOrderId}";
+
+                // 1. Get fulfillment orders using GraphQL query
+                var queryObj = new
+                {
+                    query = @"
+                        query getFulfillmentOrders($orderId: ID!) {
+                            order(id: $orderId) {
+                                fulfillmentOrders(first: 10) {
+                                    nodes {
+                                        id
+                                        status
+                                    }
+                                }
+                            }
+                        }",
+                    variables = new { orderId = orderGid }
+                };
+
+                var queryReq = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                queryReq.Headers.Add("X-Shopify-Access-Token", accessToken);
+                queryReq.Content = new StringContent(JsonSerializer.Serialize(queryObj), Encoding.UTF8, "application/json");
+
+                var queryResp = await _httpClient.SendAsync(queryReq);
+                var queryBody = await queryResp.Content.ReadAsStringAsync();
+
+                if (!queryResp.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to get fulfillment orders via GraphQL for order {OrderId}. Response: {Body}", shopifyOrderId, queryBody);
+                    return false;
+                }
+
+                var queryJson = JsonNode.Parse(queryBody);
+                var fulfillmentOrders = queryJson?["data"]?["order"]?["fulfillmentOrders"]?["nodes"]?.AsArray();
+                if (fulfillmentOrders == null || fulfillmentOrders.Count == 0)
+                {
+                    _logger.LogWarning("No fulfillment orders found via GraphQL for order {OrderId}. Response: {Body}", shopifyOrderId, queryBody);
+                    return false;
+                }
+
+                // Get first OPEN or IN_PROGRESS fulfillment order
+                var firstFulfillmentOrder = fulfillmentOrders.FirstOrDefault(fo =>
+                {
+                    var status = fo?["status"]?.ToString() ?? string.Empty;
+                    return status.Equals("OPEN", StringComparison.OrdinalIgnoreCase) ||
+                           status.Equals("IN_PROGRESS", StringComparison.OrdinalIgnoreCase);
+                });
+
+                if (firstFulfillmentOrder == null)
+                {
+                    _logger.LogWarning("No open/in-progress fulfillment order found via GraphQL for order {OrderId}", shopifyOrderId);
+                    return false;
+                }
+
+                var fulfillmentOrderId = firstFulfillmentOrder["id"]?.ToString();
+                if (string.IsNullOrEmpty(fulfillmentOrderId))
+                {
+                    _logger.LogWarning("GraphQL Fulfillment order ID is null for order {OrderId}", shopifyOrderId);
+                    return false;
+                }
+
+                // 2. Create fulfillment using GraphQL mutation
+                var mutationObj = new
+                {
+                    query = @"
+                        mutation fulfillmentCreateV2($fulfillment: FulfillmentV2Input!) {
+                            fulfillmentCreateV2(fulfillment: $fulfillment) {
+                                fulfillment {
+                                    id
+                                    status
+                                }
+                                userErrors {
+                                    field
+                                    message
+                                }
+                            }
+                        }",
+                    variables = new
+                    {
+                        fulfillment = new
+                        {
+                            lineItemsByFulfillmentOrder = new[]
+                            {
+                                new { fulfillmentOrderId = fulfillmentOrderId }
+                            },
+                            trackingInfo = new
+                            {
+                                number = trackNo,
+                                url = trackingUrl,
+                                company = carrierName
+                            },
+                            notifyCustomer = true
+                        }
+                    }
+                };
+
+                var mutationReq = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                mutationReq.Headers.Add("X-Shopify-Access-Token", accessToken);
+                mutationReq.Content = new StringContent(JsonSerializer.Serialize(mutationObj), Encoding.UTF8, "application/json");
+
+                var mutationResp = await _httpClient.SendAsync(mutationReq);
+                var mutationBody = await mutationResp.Content.ReadAsStringAsync();
+
+                if (!mutationResp.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to create Shopify fulfillment via GraphQL. Response: {Body}", mutationBody);
+                    return false;
+                }
+
+                var mutationJson = JsonNode.Parse(mutationBody);
+                var userErrors = mutationJson?["data"]?["fulfillmentCreateV2"]?["userErrors"]?.AsArray();
+                if (userErrors != null && userErrors.Count > 0)
+                {
+                    var errors = string.Join(", ", userErrors.Select(e => e?["message"]?.ToString()));
+                    _logger.LogError("User errors in GraphQL fulfillmentCreateV2: {Errors}", errors);
+                    return false;
+                }
+
+                _logger.LogInformation("Successfully created Shopify fulfillment via GraphQL for order {OrderId}. Response: {Body}", shopifyOrderId, mutationBody);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating tracking on Shopify via GraphQL for order {OrderId}", shopifyOrderId);
+                return false;
+            }
+        }
     }
 }

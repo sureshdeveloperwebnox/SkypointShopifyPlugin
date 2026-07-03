@@ -61,6 +61,7 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
 
             // Skypoint order service — handles order creation, processing, and management.
             services.AddScoped<ISkypointOrderService, SkypointOrderService>();
+            services.AddScoped<IEcommercePlatformService, EcommercePlatformService>();
 
             // Configuration store — persists app configuration to disk.
             services.AddSingleton<IConfigurationStore, ConfigurationStore>();
@@ -80,6 +81,9 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
             // Webhook in-memory background processing queue
             services.AddSingleton<IWebhookQueue, WebhookQueue>();
             services.AddHostedService<WebhookQueueProcessor>();
+
+            // SkyPoint Shipment Tracking Synchronization Service
+            services.AddHostedService<SkypointTrackingSyncService>();
 
             return services;
         }

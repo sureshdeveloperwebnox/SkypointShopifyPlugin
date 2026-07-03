@@ -19,6 +19,7 @@ public class ShopifyOrderPollingService : BackgroundService
     private readonly IShopTokenStore _shopTokenStore;
     private readonly ISkypointTokenStore _skypointTokenStore;
     private readonly SkypointApiClient _skypointApiClient;
+    private readonly ISkypointOrderStore _orderStore;
     private readonly ShopifyPollingOptions _options;
 
     private readonly Dictionary<string, DateTime> _lastProcessedTimes = new();
@@ -30,6 +31,7 @@ public class ShopifyOrderPollingService : BackgroundService
         IShopTokenStore shopTokenStore,
         ISkypointTokenStore skypointTokenStore,
         SkypointApiClient skypointApiClient,
+        ISkypointOrderStore orderStore,
         IOptions<ShopifyPollingOptions> options)
     {
         _logger = logger;
@@ -37,6 +39,7 @@ public class ShopifyOrderPollingService : BackgroundService
         _shopTokenStore = shopTokenStore;
         _skypointTokenStore = skypointTokenStore;
         _skypointApiClient = skypointApiClient;
+        _orderStore = orderStore;
         _options = options.Value;
     }
 
@@ -183,6 +186,18 @@ public class ShopifyOrderPollingService : BackgroundService
                 "Successfully created Skypoint booking {TrackNo} for Shopify order {OrderId}",
                 bookingResponse.TrackNo,
                 order.id);
+
+            try
+            {
+                var skypointOrder = SkypointOrderMapper.MapShopifyOrderToSkypointOrder(order, shop);
+                SkypointOrderMapper.UpdateWithBookingResponse(skypointOrder, bookingResponse);
+                await _orderStore.SaveOrderAsync(skypointOrder);
+                _logger.LogInformation("Saved polled Shopify order {OrderId} to SkypointOrderStore.", order.id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save polled order {OrderId} to SkypointOrderStore", order.id);
+            }
         }
         else
         {

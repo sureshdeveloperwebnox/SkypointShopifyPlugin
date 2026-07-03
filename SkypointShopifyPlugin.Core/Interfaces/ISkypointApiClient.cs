@@ -8,5 +8,7 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         Task<LoginResponse> RegisterAsync(RegisterRequest request);
         Task<List<RateResponse>> GetRatesAsync(RateRequest request, string authToken);
         Task<BookingResponse> CreateBookingAsync(BookingRequest request, string authToken);
+        Task<TrackingResponse> TrackBookingAsync(string trackNo, string authToken);
+        Task<PudoPointResponse> GetSelectedPudoPointAsync(string guid, string authToken);
     }
 }

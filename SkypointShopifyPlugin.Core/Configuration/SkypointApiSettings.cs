@@ -35,6 +35,21 @@ namespace SkypointShopifyPlugin.Core.Configuration
         public string BookingEndpoint { get; set; } = "/api/service/booking/create";
 
         /// <summary>
+        /// Booking tracking endpoint path
+        /// </summary>
+        public string TrackingEndpoint { get; set; } = "/api/service/booking/track";
+
+        /// <summary>
+        /// Selected PUDO point endpoint path
+        /// </summary>
+        public string PudoEndpoint { get; set; } = "/api/service/session/selected/pudo-point";
+
+        /// <summary>
+        /// Base URL for PUDO widget map selector
+        /// </summary>
+        public string PudoWidgetBaseUrl { get; set; } = "https://eocloudx.co.za/SkyPointSelectNoMap";
+
+        /// <summary>
         /// Request timeout in seconds (optional - defaults to 30)
         /// </summary>
         public int TimeoutSeconds { get; set; } = 30;
@@ -61,5 +76,11 @@ namespace SkypointShopifyPlugin.Core.Configuration
 
         /// <summary>Gets the full booking URL</summary>
         public string GetBookingUrl() => $"{BaseUrl}{BookingEndpoint}";
+
+        /// <summary>Gets the full booking tracking URL for a specific track/waybill number</summary>
+        public string GetTrackingUrl(string trackNo) => $"{BaseUrl}{TrackingEndpoint}/{trackNo}";
+
+        /// <summary>Gets the full selected PUDO point URL for a specific session GUID</summary>
+        public string GetPudoSelectedUrl(string guid) => $"{BaseUrl}{PudoEndpoint}/{guid}";
     }
 }

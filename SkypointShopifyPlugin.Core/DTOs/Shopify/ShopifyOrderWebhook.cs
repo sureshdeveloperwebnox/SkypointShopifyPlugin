@@ -20,6 +20,13 @@ namespace SkypointShopifyPlugin.Core.DTOs.Shopify
         [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
         public decimal total_price { get; set; }
         public string currency { get; set; } = string.Empty;
+        public List<ShopifyNoteAttribute> note_attributes { get; set; } = new();
+    }
+
+    public class ShopifyNoteAttribute
+    {
+        public string name { get; set; } = string.Empty;
+        public string value { get; set; } = string.Empty;
     }
 
     public class ShopifyCustomer
