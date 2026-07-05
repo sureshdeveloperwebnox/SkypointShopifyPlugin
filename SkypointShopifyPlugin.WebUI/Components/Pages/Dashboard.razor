@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @inject ProtectedSessionStorage SessionStorage
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
 <div class="dashboard-container" style="max-width: 1100px; margin: 40px auto; padding: 0 20px; color: #ffffff;">
     @if (!isLoaded)
@@ -145,29 +146,248 @@
                                 {
                                     <tr style="background: rgba(15, 23, 42, 0.45);">
                                         <td colspan="6" style="padding: 20px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-                                            <h4 style="font-size: 1rem; font-weight: 800; color: #ffffff; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; margin-top: 0;">
-                                                <span>Shipment Timeline (Waybill: <span style="font-family: monospace; color: #f43f5e;">@order.SkypointTrackNo</span>)</span>
-                                                <button @onclick="() => selectedOrder = null" @onclick:stopPropagation="true" style="background: transparent; border: none; color: #94a3b8; font-size: 1.25rem; cursor: pointer; line-height: 1;">×</button>
-                                            </h4>
+                                            <!-- Sub-navigation Tabs -->
+                                            <div class="d-flex mb-4" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                                                <button @onclick="@(() => activeTab = "timeline")" @onclick:stopPropagation="true" class="tab-btn @(activeTab == "timeline" ? "active" : "")" style="background: transparent; border: none; color: @(activeTab == "timeline" ? "#ff1e27" : "#94a3b8"); border-bottom: 2px solid @(activeTab == "timeline" ? "#ff1e27" : "transparent"); padding: 8px 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-right: 8px;">
+                                                    <i class="fas fa-history mr-2"></i>Tracking Timeline
+                                                </button>
+                                                <button @onclick="@(() => activeTab = "pudo")" @onclick:stopPropagation="true" class="tab-btn @(activeTab == "pudo" ? "active" : "")" style="background: transparent; border: none; color: @(activeTab == "pudo" ? "#ff1e27" : "#94a3b8"); border-bottom: 2px solid @(activeTab == "pudo" ? "#ff1e27" : "transparent"); padding: 8px 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-right: 8px;">
+                                                    <i class="fas fa-map-marked-alt mr-2"></i>PUDO / Location Details
+                                                </button>
+                                                <button @onclick="@(() => activeTab = "parcel")" @onclick:stopPropagation="true" class="tab-btn @(activeTab == "parcel" ? "active" : "")" style="background: transparent; border: none; color: @(activeTab == "parcel" ? "#ff1e27" : "#94a3b8"); border-bottom: 2px solid @(activeTab == "parcel" ? "#ff1e27" : "transparent"); padding: 8px 16px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                                                    <i class="fas fa-box-open mr-2"></i>Parcel & Pricing
+                                                </button>
+                                            </div>
 
-                                            @if (order.TrackingHistory == null || order.TrackingHistory.Count == 0)
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                                                <h4 style="font-size: 1rem; font-weight: 800; color: #ffffff; margin: 0;">
+                                                    @if (activeTab == "timeline")
+                                                    {
+                                                        <span>Shipment Timeline (Waybill: <span style="font-family: monospace; color: #f43f5e;">@order.SkypointTrackNo</span>)</span>
+                                                    }
+                                                    else if (activeTab == "pudo")
+                                                    {
+                                                        <span>PUDO Location Details</span>
+                                                    }
+                                                    else if (activeTab == "parcel")
+                                                    {
+                                                        <span>Parcel Specifications</span>
+                                                    }
+                                                </h4>
+                                                <button @onclick="() => selectedOrder = null" @onclick:stopPropagation="true" style="background: transparent; border: none; color: #94a3b8; font-size: 1.25rem; cursor: pointer; line-height: 1;">×</button>
+                                            </div>
+
+                                            @if (activeTab == "timeline")
                                             {
-                                                <div style="color: #94a3b8;" class="text-center py-2">
-                                                    <p style="margin-bottom: 8px;">No tracking history available locally.</p>
-                                                    <button @onclick="() => SyncOrderTracking(order)" @onclick:stopPropagation="true" class="btn-sync" style="background: #ff1e27; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Fetch Live Status</button>
+                                                @if (order.TrackingHistory == null || order.TrackingHistory.Count == 0)
+                                                {
+                                                    <div style="color: #94a3b8;" class="text-center py-2">
+                                                        <p style="margin-bottom: 8px;">No tracking history available locally.</p>
+                                                        <button @onclick="() => SyncOrderTracking(order)" @onclick:stopPropagation="true" class="btn-sync" style="background: #ff1e27; color: white; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer;">Fetch Live Status</button>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="timeline-container" style="position: relative; padding-left: 28px; border-left: 2px solid rgba(255, 255, 255, 0.1); margin-left: 8px; margin-top: 12px;">
+                                                        @foreach (var ev in order.TrackingHistory)
+                                                        {
+                                                            <div class="timeline-event" style="position: relative; margin-bottom: 20px;">
+                                                                <div class="timeline-badge" style="position: absolute; left: -36px; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: @(ev.WaybillEventDescription.Equals("Admin POD", StringComparison.OrdinalIgnoreCase) ? "#34d399" : "#ff1e27"); border: 3px solid #0f172a; box-shadow: 0 0 6px @(ev.WaybillEventDescription.Equals("Admin POD", StringComparison.OrdinalIgnoreCase) ? "rgba(52, 211, 153, 0.4)" : "rgba(255, 30, 39, 0.4)");"></div>
+                                                                <div style="font-size: 0.75rem; color: #94a3b8;">@ev.WaybillEventDate @ev.WaybillEventTime @(string.IsNullOrEmpty(ev.WaybillEventBranch) ? "" : $"• {ev.WaybillEventBranch}")</div>
+                                                                <div style="font-weight: 700; color: #ffffff; font-size: 0.9rem; margin-top: 2px;">@ev.WaybillEventDescription</div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+                                            else if (activeTab == "pudo")
+                                            {
+                                                <div class="steps-bar-container" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.03); padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);">
+                                                    <div class="step-item" style="text-align: center; flex: 1;">
+                                                        <span style="display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: #ff1e27; color: white; font-weight: bold; font-size: 0.85rem; line-height: 24px; margin-bottom: 4px;">1</span>
+                                                        <div style="font-size: 0.75rem; font-weight: 700; color: #ffffff;">Step 1 - Location</div>
+                                                    </div>
+                                                    <div style="flex: 1; height: 2px; background: #ff1e27; margin: 0 10px; margin-bottom: 15px; opacity: 0.5;"></div>
+                                                    <div class="step-item" style="text-align: center; flex: 1;">
+                                                        <span style="display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: #ff1e27; color: white; font-weight: bold; font-size: 0.85rem; line-height: 24px; margin-bottom: 4px;">2</span>
+                                                        <div style="font-size: 0.75rem; font-weight: 700; color: #ffffff;">Step 2 - Parcel</div>
+                                                    </div>
+                                                    <div style="flex: 1; height: 2px; background: #ff1e27; margin: 0 10px; margin-bottom: 15px; opacity: 0.5;"></div>
+                                                    <div class="step-item" style="text-align: center; flex: 1;">
+                                                        <span style="display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: #ff1e27; color: white; font-weight: bold; font-size: 0.85rem; line-height: 24px; margin-bottom: 4px;">3</span>
+                                                        <div style="font-size: 0.75rem; font-weight: 700; color: #ffffff;">Step 3 - Pricing</div>
+                                                    </div>
+                                                    <div style="flex: 1; height: 2px; background: #ff1e27; margin: 0 10px; margin-bottom: 15px; opacity: 0.5;"></div>
+                                                    <div class="step-item" style="text-align: center; flex: 1;">
+                                                        <span style="display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: #ff1e27; color: white; font-weight: bold; font-size: 0.85rem; line-height: 24px; margin-bottom: 4px;">4</span>
+                                                        <div style="font-size: 0.75rem; font-weight: 700; color: #ffffff;">Step 4 - Details</div>
+                                                    </div>
+                                                    <div style="flex: 1; height: 2px; background: #34d399; margin: 0 10px; margin-bottom: 15px; opacity: 0.5;"></div>
+                                                    <div class="step-item" style="text-align: center; flex: 1;">
+                                                        <span style="display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: #34d399; color: white; font-weight: bold; font-size: 0.85rem; line-height: 24px; margin-bottom: 4px;">✓</span>
+                                                        <div style="font-size: 0.75rem; font-weight: 700; color: #34d399;">Step 5 - Checkout</div>
+                                                    </div>
+                                                </div>
+
+                                                <div style="background: #ff1e27; border-top-left-radius: 12px; border-top-right-radius: 12px; padding: 12px; text-align: center;">
+                                                    <h4 style="margin: 0; color: white; font-weight: 800; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px;">Location Details</h4>
+                                                </div>
+                                                
+                                                <div style="background: rgba(15, 22, 42, 0.95); border: 1px solid rgba(255,255,255,0.08); border-top: none; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; padding: 24px; position: relative;">
+                                                    
+                                                    <!-- Top header with toggle/switch -->
+                                                    <div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+                                                        <div style="display: flex; align-items: center;">
+                                                            <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 700; margin-right: 8px;">RTMC Shipment</span>
+                                                            <label style="position: relative; display: inline-block; width: 44px; height: 22px;">
+                                                                <input type="checkbox" disabled checked style="opacity: 0; width: 0; height: 0;">
+                                                                <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ff1e27; border-radius: 34px; transition: .4s; display: block;"></span>
+                                                                <span style="position: absolute; content: ''; height: 16px; width: 16px; left: 24px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; display: block;"></span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Connecting Graphic -->
+                                                    <div style="display: flex; justify-content: center; align-items: center; margin-bottom: 30px; position: relative;">
+                                                        <!-- Blue Pin -->
+                                                        <div style="background: #2563eb; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.4); z-index: 2;">
+                                                            <i class="fas fa-map-marker-alt" style="color: white; font-size: 1.25rem;"></i>
+                                                        </div>
+                                                        
+                                                        <!-- Line with gradient dots -->
+                                                        <div style="flex: 1; height: 4px; display: flex; justify-content: space-around; align-items: center; margin: 0 12px; position: relative;">
+                                                            <div style="position: absolute; left: 0; right: 0; top: 50%; height: 2px; border-top: 2px dotted #2563eb; transform: translateY(-50%); opacity: 0.5;"></div>
+                                                            <div style="position: absolute; left: 50%; right: 0; top: 50%; height: 2px; border-top: 2px dotted #ff1e27; transform: translateY(-50%); opacity: 0.5;"></div>
+                                                        </div>
+                                                        
+                                                        <!-- Red Pin -->
+                                                        <div style="background: #ff1e27; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(255, 30, 39, 0.4); z-index: 2;">
+                                                            <i class="fas fa-map-marker-alt" style="color: white; font-size: 1.25rem;"></i>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Input Columns -->
+                                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;">
+                                                        
+                                                        <!-- Pick up Column -->
+                                                        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px;">
+                                                            <h5 style="color: #ffffff; font-weight: 700; font-size: 0.95rem; margin-top: 0; margin-bottom: 12px; text-align: center;">Choose pick up country</h5>
+                                                            <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 16px;">
+                                                                <button style="background: #ff1e27; color: white; border: none; border-radius: 15px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                                                                    🇿🇦 South Africa
+                                                                </button>
+                                                                <button style="background: rgba(255,255,255,0.08); color: #94a3b8; border: none; border-radius: 15px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px;" disabled>
+                                                                    🌐 Rest of World
+                                                                </button>
+                                                            </div>
+                                                            
+                                                            <div class="form-group" style="margin-bottom: 12px;">
+                                                                <input type="text" readonly value="@(order.BillingAddress != null ? $"{order.BillingAddress.Address1}, {order.BillingAddress.City}, {order.BillingAddress.Province}, {order.BillingAddress.Zip}" : "Origin Warehouse")" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; color: #ffffff; font-size: 0.85rem;" />
+                                                            </div>
+                                                            
+                                                            <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                                                                <span style="color: #60a5fa; cursor: not-allowed; text-decoration: underline;">Use address book</span>
+                                                                <span style="color: #60a5fa; cursor: not-allowed; text-decoration: underline;">Use my current location</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Drop off Column -->
+                                                        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px;">
+                                                            <h5 style="color: #ffffff; font-weight: 700; font-size: 0.95rem; margin-top: 0; margin-bottom: 12px; text-align: center;">Choose drop off country</h5>
+                                                            <div style="display: flex; justify-content: center; gap: 10px; margin-bottom: 16px;">
+                                                                <button style="background: #ff1e27; color: white; border: none; border-radius: 15px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                                                                    🇿🇦 South Africa
+                                                                </button>
+                                                                <button style="background: rgba(255,255,255,0.08); color: #94a3b8; border: none; border-radius: 15px; padding: 4px 12px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px;" disabled>
+                                                                    🌐 Rest of World
+                                                                </button>
+                                                            </div>
+                                                            
+                                                            <!-- PUDO Toggle -->
+                                                            <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                                                                <input type="checkbox" id="sendToCounter" checked="@(!string.IsNullOrEmpty(order.ToCounterCode))" disabled style="margin-right: 6px; accent-color: #ff1e27;" />
+                                                                <label for="sendToCounter" style="font-size: 0.85rem; font-weight: 700; color: #ffffff; margin-bottom: 0;">Send to counter (PUDO)</label>
+                                                            </div>
+                                                            
+                                                            <div class="form-group" style="margin-bottom: 12px;">
+                                                                @if (!string.IsNullOrEmpty(order.ToCounterCode))
+                                                                {
+                                                                    <input type="text" readonly value="@($"{order.ToCounterName} ({order.ToCounterCode}) - {order.PudoAddress1}, {order.PudoCity}, {order.PudoZip}")" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; color: #ffffff; font-size: 0.85rem;" />
+                                                                }
+                                                                else
+                                                                {
+                                                                    <input type="text" readonly value="@(order.ShippingAddress != null ? $"{order.ShippingAddress.Address1}, {order.ShippingAddress.City}, {order.ShippingAddress.Province}, {order.ShippingAddress.Zip}" : "No shipping address")" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; color: #ffffff; font-size: 0.85rem;" />
+                                                                }
+                                                            </div>
+                                                            
+                                                            <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                                                                <span style="color: #60a5fa; cursor: not-allowed; text-decoration: underline;">Use address book</span>
+                                                                <span style="color: #60a5fa; cursor: not-allowed; text-decoration: underline;">Use my current location</span>
+                                                            </div>
+                                                        </div>
+
+                                                    </div>
+
+                                                    <!-- Proceed Button -->
+                                                    <div style="display: flex; justify-content: flex-end; margin-top: 24px;">
+                                                        @if (isLoadingPudoSelection)
+                                                        {
+                                                            <button class="btn-sync" style="background: rgba(255, 30, 39, 0.15); border: 1px solid rgba(255, 30, 39, 0.25); border-radius: 8px; padding: 10px 24px; color: #ff1e27; font-weight: bold; cursor: not-allowed; display: flex; align-items: center; gap: 8px;" disabled>
+                                                                <i class="fas fa-spinner fa-spin"></i> Processing...
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button @onclick="() => LaunchPudoSelection(order)" @onclick:stopPropagation="true" class="btn-sync" style="background: #ff1e27; border: none; border-radius: 8px; padding: 10px 24px; color: white; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+                                                                Proceed
+                                                            </button>
+                                                        }
+                                                    </div>
+
                                                 </div>
                                             }
-                                            else
+                                            else if (activeTab == "parcel")
                                             {
-                                                <div class="timeline-container" style="position: relative; padding-left: 28px; border-left: 2px solid rgba(255, 255, 255, 0.1); margin-left: 8px; margin-top: 12px;">
-                                                    @foreach (var ev in order.TrackingHistory)
-                                                    {
-                                                        <div class="timeline-event" style="position: relative; margin-bottom: 20px;">
-                                                            <div class="timeline-badge" style="position: absolute; left: -36px; top: 4px; width: 14px; height: 14px; border-radius: 50%; background: @(ev.WaybillEventDescription.Equals("Admin POD", StringComparison.OrdinalIgnoreCase) ? "#34d399" : "#ff1e27"); border: 3px solid #0f172a; box-shadow: 0 0 6px @(ev.WaybillEventDescription.Equals("Admin POD", StringComparison.OrdinalIgnoreCase) ? "rgba(52, 211, 153, 0.4)" : "rgba(255, 30, 39, 0.4)");"></div>
-                                                            <div style="font-size: 0.75rem; color: #94a3b8;">@ev.WaybillEventDate @ev.WaybillEventTime @(string.IsNullOrEmpty(ev.WaybillEventBranch) ? "" : $"• {ev.WaybillEventBranch}")</div>
-                                                            <div style="font-weight: 700; color: #ffffff; font-size: 0.9rem; margin-top: 2px;">@ev.WaybillEventDescription</div>
+                                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                                                    <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px;">
+                                                        <h4 style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-top: 0; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">Pricing & Shipment Info</h4>
+                                                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                                                <td style="padding: 10px 0; color: #94a3b8;">Total Price:</td>
+                                                                <td style="padding: 10px 0; font-weight: 700; color: #ffffff; text-align: right;">@order.TotalPrice @order.Currency</td>
+                                                            </tr>
+                                                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                                                <td style="padding: 10px 0; color: #94a3b8;">Carrier Provider:</td>
+                                                                <td style="padding: 10px 0; color: #ffffff; text-align: right;">@(order.PudoProvider ?? "Skypoint")</td>
+                                                            </tr>
+                                                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                                                <td style="padding: 10px 0; color: #94a3b8;">Financial Status:</td>
+                                                                <td style="padding: 10px 0; color: #ffffff; text-align: right;"><span style="text-transform: uppercase; font-size: 0.8rem; font-weight: 700; color: #60a5fa;">@order.FinancialStatus</span></td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td style="padding: 10px 0; color: #94a3b8;">Fulfillment Status:</td>
+                                                                <td style="padding: 10px 0; color: #ffffff; text-align: right;"><span style="text-transform: uppercase; font-size: 0.8rem; font-weight: 700; color: #eab308;">@order.FulfillmentStatus</span></td>
+                                                            </tr>
+                                                        </table>
+                                                    </div>
+                                                    
+                                                    <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px;">
+                                                        <h4 style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-top: 0; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">Order Line Items</h4>
+                                                        <div style="max-height: 250px; overflow-y: auto;">
+                                                            @foreach (var item in order.LineItems)
+                                                            {
+                                                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                                                    <div>
+                                                                        <div style="color: #ffffff; font-weight: 600; font-size: 0.85rem;">@item.Title</div>
+                                                                        <div style="color: #94a3b8; font-size: 0.75rem;">SKU: @(string.IsNullOrEmpty(item.Sku) ? "-" : item.Sku)</div>
+                                                                    </div>
+                                                                    <div style="color: #ffffff; font-size: 0.85rem; font-weight: 700; text-align: right;">
+                                                                        @item.Quantity x @item.Price @order.Currency
+                                                                    </div>
+                                                                </div>
+                                                            }
                                                         </div>
-                                                    }
+                                                    </div>
                                                 </div>
                                             }
                                         </td>
@@ -212,6 +432,8 @@
     private List<SkypointOrder> orders = new();
     private SkypointOrder? selectedOrder;
     private bool isLoadingOrders = false;
+    private string activeTab = "timeline";
+    private bool isLoadingPudoSelection = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -417,5 +639,163 @@
             isLoadingOrders = false;
             StateHasChanged();
         }
+    }
+
+    private async Task LaunchPudoSelection(SkypointOrder order)
+    {
+        isLoadingPudoSelection = true;
+        StateHasChanged();
+
+        try
+        {
+            var shopDomain = string.IsNullOrEmpty(Shop) ? "deeprintztestapp.myshopify.com" : Shop;
+            var address = order.ShippingAddress != null 
+                ? $"{order.ShippingAddress.Address1}, {order.ShippingAddress.City}, {order.ShippingAddress.Province}, {order.ShippingAddress.Zip}" 
+                : "140 North Reef Road, Cape Town";
+            
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var domain = $"{baseUri.Scheme}://{baseUri.Host}{(baseUri.IsDefaultPort ? "" : $":{baseUri.Port}")}";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/pudo/widget-url?shop={Uri.EscapeDataString(shopDomain)}&address={Uri.EscapeDataString(address)}&domain={Uri.EscapeDataString(domain)}");
+            if (!string.IsNullOrEmpty(token))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<WidgetUrlResponse>();
+                if (result != null && result.Success && !string.IsNullOrEmpty(result.WidgetUrl))
+                {
+                    var dotNetHelper = DotNetObjectReference.Create(this);
+                    await JSRuntime.InvokeVoidAsync("skypointPudo.openPudoSelector", result.Guid, result.WidgetUrl, dotNetHelper);
+                }
+                else
+                {
+                    carrierMessage = "Failed to generate PUDO widget URL.";
+                    isLoadingPudoSelection = false;
+                    StateHasChanged();
+                }
+            }
+            else
+            {
+                carrierMessage = "Failed to communicate with PUDO widget URL generator.";
+                isLoadingPudoSelection = false;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            carrierMessage = $"Failed to open PUDO selector: {ex.Message}";
+            isLoadingPudoSelection = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnPudoSelected(string guid)
+    {
+        try
+        {
+            var shopDomain = string.IsNullOrEmpty(Shop) ? "deeprintztestapp.myshopify.com" : Shop;
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/pudo/selected/{guid}?shop={Uri.EscapeDataString(shopDomain)}");
+
+            if (!string.IsNullOrEmpty(token))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<SelectedPudoResponse>();
+                if (result != null && result.Success && result.PudoPoint != null)
+                {
+                    var point = result.PudoPoint;
+                    if (selectedOrder != null)
+                    {
+                        selectedOrder.ToCounterCode = point.Code;
+                        selectedOrder.ToCounterName = point.Name;
+                        selectedOrder.PudoAddress1 = point.Addr1;
+                        selectedOrder.PudoCity = point.City;
+                        selectedOrder.PudoZip = point.Pcode;
+                        selectedOrder.PudoProvider = point.Provider;
+
+                        if (selectedOrder.ShippingAddress != null)
+                        {
+                            selectedOrder.ShippingAddress.Address1 = point.Addr1;
+                            selectedOrder.ShippingAddress.City = point.City;
+                            selectedOrder.ShippingAddress.Zip = point.Pcode;
+                        }
+
+                        using var updateRequest = new HttpRequestMessage(HttpMethod.Put, $"api/skypoint/orders/{selectedOrder.Id}/pudo");
+                        if (!string.IsNullOrEmpty(token))
+                        {
+                            updateRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                        }
+
+                        updateRequest.Content = JsonContent.Create(new UpdateOrderPudoRequest
+                        {
+                            ToCounterCode = point.Code,
+                            ToCounterName = point.Name,
+                            PudoAddress1 = point.Addr1,
+                            PudoCity = point.City,
+                            PudoZip = point.Pcode,
+                            PudoProvider = point.Provider
+                        });
+
+                        var updateResponse = await Http.SendAsync(updateRequest);
+                        if (updateResponse.IsSuccessStatusCode)
+                        {
+                            carrierMessage = $"Successfully selected PUDO point: {point.Name} ({point.Code})";
+                            await LoadOrders();
+                        }
+                        else
+                        {
+                            carrierMessage = "PUDO point selected, but failed to save details to database.";
+                        }
+                    }
+                }
+                else
+                {
+                    carrierMessage = "Failed to load PUDO point details from server.";
+                }
+            }
+            else
+            {
+                carrierMessage = "Failed to fetch selected PUDO point from API.";
+            }
+        }
+        catch (Exception ex)
+        {
+            carrierMessage = $"Error processing selected PUDO point: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingPudoSelection = false;
+            StateHasChanged();
+        }
+    }
+
+    public class SelectedPudoResponse
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("pudo_point")]
+        public PudoPointResponse? PudoPoint { get; set; }
+    }
+
+    public class WidgetUrlResponse
+    {
+        [JsonPropertyName("success")]
+        public bool Success { get; set; }
+
+        [JsonPropertyName("guid")]
+        public string? Guid { get; set; }
+
+        [JsonPropertyName("widget_url")]
+        public string? WidgetUrl { get; set; }
     }
 }

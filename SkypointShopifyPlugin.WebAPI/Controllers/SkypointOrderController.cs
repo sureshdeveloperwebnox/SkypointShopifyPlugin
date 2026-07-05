@@ -217,6 +217,39 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 return StatusCode(500, new { success = false, message = "Failed to delete order" });
             }
         }
+
+        /// <summary>
+        /// Update order with PUDO details
+        /// PUT /api/skypoint/orders/{orderId}/pudo
+        /// </summary>
+        [HttpPut("{orderId}/pudo")]
+        public async Task<IActionResult> UpdateOrderPudo(string orderId, [FromBody] UpdateOrderPudoRequest request)
+        {
+            _logger.LogInformation("Update PUDO details request for order {OrderId}", orderId);
+
+            if (string.IsNullOrEmpty(request.ToCounterCode))
+            {
+                return BadRequest(new { error = "ToCounterCode is required" });
+            }
+
+            var success = await _orderService.UpdateOrderPudoAsync(
+                orderId,
+                request.ToCounterCode,
+                request.ToCounterName,
+                request.PudoAddress1,
+                request.PudoCity,
+                request.PudoZip,
+                request.PudoProvider);
+
+            if (success)
+            {
+                return Ok(new { success = true, message = "PUDO details updated successfully" });
+            }
+            else
+            {
+                return StatusCode(500, new { success = false, message = "Failed to update PUDO details" });
+            }
+        }
     }
 
     /// <summary>

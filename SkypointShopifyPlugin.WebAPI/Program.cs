@@ -115,7 +115,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Redirect root "/" to setup page for first-time configuration
-app.MapGet("/", () => Results.Redirect("/setup.html"));
+app.MapGet("/", () => Results.Redirect("/setup"));
 
 // Unknown API routes should stay API-shaped instead of falling through to the SPA file fallback.
 app.Map("/api/{**catchAll}", () => Results.NotFound());

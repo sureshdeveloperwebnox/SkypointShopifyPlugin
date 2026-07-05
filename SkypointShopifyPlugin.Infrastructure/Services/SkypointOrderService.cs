@@ -369,5 +369,50 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 return false;
             }
         }
+
+        public async Task<bool> UpdateOrderPudoAsync(
+            string orderId,
+            string toCounterCode,
+            string toCounterName,
+            string pudoAddress1,
+            string pudoCity,
+            string pudoZip,
+            string pudoProvider)
+        {
+            try
+            {
+                var order = await _orderStore.GetOrderByIdAsync(orderId);
+                if (order == null)
+                {
+                    _logger.LogError("Order {OrderId} not found for PUDO update", orderId);
+                    return false;
+                }
+
+                order.ToCounterCode = toCounterCode;
+                order.ToCounterName = toCounterName;
+                order.PudoAddress1 = pudoAddress1;
+                order.PudoCity = pudoCity;
+                order.PudoZip = pudoZip;
+                order.PudoProvider = pudoProvider;
+                order.UpdatedAt = DateTime.UtcNow;
+
+                // Sync ShippingAddress with selected PUDO point details
+                if (order.ShippingAddress != null)
+                {
+                    order.ShippingAddress.Address1 = pudoAddress1;
+                    order.ShippingAddress.City = pudoCity;
+                    order.ShippingAddress.Zip = pudoZip;
+                }
+
+                await _orderStore.UpdateOrderAsync(order);
+                _logger.LogInformation("Updated order {OrderId} with PUDO counter {CounterCode}", orderId, toCounterCode);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating order {OrderId} with PUDO details", orderId);
+                return false;
+            }
+        }
     }
 }

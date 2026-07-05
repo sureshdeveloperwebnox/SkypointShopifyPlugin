@@ -15,41 +15,54 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         private readonly ISkypointTokenStore _skypointTokenStore;
         private readonly SkypointApiSettings _apiSettings;
         private readonly IConfiguration _configuration;
+        private readonly IConfigurationStore _configurationStore;
 
         public PudoController(
             ILogger<PudoController> logger,
             ISkypointApiClient skypointApiClient,
             ISkypointTokenStore skypointTokenStore,
             IOptions<SkypointApiSettings> apiSettings,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IConfigurationStore configurationStore)
         {
             _logger = logger;
             _skypointApiClient = skypointApiClient;
             _skypointTokenStore = skypointTokenStore;
             _apiSettings = apiSettings.Value;
             _configuration = configuration;
+            _configurationStore = configurationStore;
         }
 
         /// <summary>
         /// Generates the SkyPoint widget URL for PUDO point selection.
-        /// GET /api/pudo/widget-url?shop=xxx&address=xxx
+        /// GET /api/pudo/widget-url?shop=xxx&address=xxx&domain=xxx
         /// </summary>
         [HttpGet("widget-url")]
-        public IActionResult GetWidgetUrl([FromQuery] string shop, [FromQuery] string address)
+        public async Task<IActionResult> GetWidgetUrl([FromQuery] string shop, [FromQuery] string address, [FromQuery] string? domain)
         {
             if (string.IsNullOrEmpty(shop))
                 return BadRequest(new { error = "shop domain is required" });
 
             var guid = Guid.NewGuid().ToString();
-            var callbackUrl = _configuration["Shopify:RedirectUri"] ?? $"{Request.Scheme}://{Request.Host}/api/shopify/auth";
             
-            // Strip the path from the redirect URL to get the base domain for callback domain parameter
-            var uri = new Uri(callbackUrl);
-            var domain = $"{uri.Scheme}://{uri.Host}";
+            string callbackDomain;
+            if (!string.IsNullOrEmpty(domain))
+            {
+                callbackDomain = domain;
+            }
+            else
+            {
+                var callbackUrl = _configuration["Shopify:RedirectUri"] ?? $"{Request.Scheme}://{Request.Host}/api/shopify/auth";
+                var uri = new Uri(callbackUrl);
+                callbackDomain = $"{uri.Scheme}://{uri.Host}";
+            }
 
-            var widgetUrl = $"{_apiSettings.PudoWidgetBaseUrl}?Guid={guid}&Location={HttpUtility.UrlEncode(address)}&Id=SKYONLINE&Env=TEST&Domain={HttpUtility.UrlEncode(domain)}";
+            var appConfig = await _configurationStore.LoadConfigurationAsync();
+            var widgetBaseUrl = appConfig?.SkypointApi?.PudoWidgetBaseUrl ?? _apiSettings.PudoWidgetBaseUrl;
 
-            _logger.LogInformation("Generated PUDO widget URL for shop {Shop} with GUID {Guid}", shop, guid);
+            var widgetUrl = $"{widgetBaseUrl}?Guid={guid}&Location={HttpUtility.UrlEncode(address)}&Id=SKYONLINE&Env=TEST&Domain={HttpUtility.UrlEncode(callbackDomain)}";
+
+            _logger.LogInformation("Generated PUDO widget URL for shop {Shop} with GUID {Guid} and Domain {Domain}", shop, guid, callbackDomain);
 
             return Ok(new
             {

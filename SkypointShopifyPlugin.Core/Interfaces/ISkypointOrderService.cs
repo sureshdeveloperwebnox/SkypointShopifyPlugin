@@ -52,5 +52,17 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         /// Sync order status from Skypoint API
         /// </summary>
         Task<bool> SyncOrderStatusAsync(string orderId);
+
+        /// <summary>
+        /// Update order with PUDO counter details
+        /// </summary>
+        Task<bool> UpdateOrderPudoAsync(
+            string orderId,
+            string toCounterCode,
+            string toCounterName,
+            string pudoAddress1,
+            string pudoCity,
+            string pudoZip,
+            string pudoProvider);
     }
 }

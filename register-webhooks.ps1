@@ -3,7 +3,7 @@
 
 # Configuration
 $ShopDomain = "deeprintztestapp.myshopify.com"  # Change to your store domain
-$PublicBaseUrl = "https://29c1-42-104-201-2.ngrok-free.app"  # Your WebAPI ngrok URL
+$PublicBaseUrl = "https://eboni-unprizable-discriminatingly.ngrok-free.dev"  # Your WebAPI ngrok URL
 $ApiBaseUrl = "http://localhost:5126"  # Your local WebAPI port
 
 Write-Host "Syncing webhooks for shop: $ShopDomain" -ForegroundColor Cyan

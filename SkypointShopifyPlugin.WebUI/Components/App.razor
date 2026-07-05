@@ -22,6 +22,68 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
+    <script>
+        window.skypointPudo = {
+            popupWindow: null,
+            dotNetHelper: null,
+            guid: null,
+            
+            openPudoSelector: function (guid, widgetUrl, dotNetHelper) {
+                window.skypointPudo.dotNetHelper = dotNetHelper;
+                window.skypointPudo.guid = guid;
+                
+                if (!window.skypointPudo.isListenerRegistered) {
+                    window.addEventListener('message', window.skypointPudo.receiveSkyPointMessage);
+                    window.skypointPudo.isListenerRegistered = true;
+                }
+                
+                console.log('Opening SkyPoint Selector URL:', widgetUrl);
+                
+                const width = 800;
+                const height = 650;
+                const left = (screen.width - width) / 2;
+                const top = (screen.height - height) / 2;
+                
+                window.skypointPudo.popupWindow = window.open(
+                    widgetUrl, 
+                    'SkyPointPudoSelector', 
+                    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+                );
+                
+                if (window.skypointPudo.popupWindow) {
+                    window.skypointPudo.popupWindow.focus();
+                } else {
+                    alert('Popup blocked! Please allow popups for this site to select a PUDO counter.');
+                }
+            },
+            
+            receiveSkyPointMessage: function (event) {
+                console.log('Message received from SkyPoint:', event.data);
+                
+                let data = event.data;
+                if (typeof data === 'string') {
+                    try {
+                        data = JSON.parse(data);
+                    } catch (e) {
+                        // Ignore non-JSON strings
+                    }
+                }
+                
+                if (data && data.result === 'success') {
+                    console.log('SkyPoint selection success! GUID:', window.skypointPudo.guid);
+                    
+                    if (window.skypointPudo.popupWindow) {
+                        window.skypointPudo.popupWindow.close();
+                        window.skypointPudo.popupWindow = null;
+                    }
+                    
+                    if (window.skypointPudo.dotNetHelper) {
+                        window.skypointPudo.dotNetHelper.invokeMethodAsync('OnPudoSelected', window.skypointPudo.guid);
+                    }
+                }
+            }
+        };
+    </script>
 </body>
 
 </html>
