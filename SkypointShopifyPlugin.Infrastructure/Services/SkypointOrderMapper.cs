@@ -16,7 +16,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         /// <summary>
         /// Maps a SkypointOrder to a BookingRequest for the Skypoint API
         /// </summary>
-        public static BookingRequest MapToBookingRequest(SkypointOrder order, string skypointUserId)
+        public static BookingRequest MapToBookingRequest(SkypointOrder order, string skypointUserId, IConfiguration? configuration = null)
         {
             var shippingAddress = order.ShippingAddress;
             var billingAddress = order.BillingAddress;
@@ -32,15 +32,39 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 ? order.LineItems
                 : new List<SkypointOrderItem> { new() { Sku = order.OrderNumber, Quantity = 1 } };
 
+            // Clean up postal codes and suburbs if configuration is available
+            var pickupPCode = FirstNonEmpty(billingAddress?.Zip, " ");
+            var fromSuburb = FirstNonEmpty(billingAddress?.City, " ");
+            var dropOffPCode = FirstNonEmpty(shippingAddress?.Zip, " ");
+            var toSuburb = !string.IsNullOrEmpty(order.ToCounterCode)
+                ? FirstNonEmpty(shippingAddress?.Address2, shippingAddress?.City, " ")
+                : FirstNonEmpty(shippingAddress?.City, " ");
+
+            if (configuration != null)
+            {
+                pickupPCode = MapPostalCode(pickupPCode, fromSuburb, configuration);
+                fromSuburb = MapSuburb(fromSuburb, pickupPCode, configuration);
+                
+                if (string.IsNullOrEmpty(order.ToCounterCode))
+                {
+                    dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
+                    toSuburb = MapSuburb(toSuburb, dropOffPCode, configuration);
+                }
+                else
+                {
+                    dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
+                }
+            }
+
             return new BookingRequest
             {
                 UserId = skypointUserId,
                 PickUpAddress = FirstNonEmpty(billingAddress?.Address1, " "),
                 DropOffAddress = FirstNonEmpty(shippingAddress?.Address1, " "),
-                FromSuburb = FirstNonEmpty(billingAddress?.City, " "),
-                ToSuburb = FirstNonEmpty(shippingAddress?.City, " "),
-                PickUpPCode = FirstNonEmpty(billingAddress?.Zip, " "),
-                DropOffPCode = FirstNonEmpty(shippingAddress?.Zip, " "),
+                FromSuburb = fromSuburb,
+                ToSuburb = toSuburb,
+                PickUpPCode = pickupPCode,
+                DropOffPCode = dropOffPCode,
                 Comment = $"@PickUp: Skypoint Order #{order.OrderNumber} @DropOff: No comment",
                 Province = FirstNonEmpty(billingAddress?.Province, " "),
                 DestinationProvince = FirstNonEmpty(shippingAddress?.Province, " "),
@@ -50,10 +74,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     LastName = FirstNonEmpty(shippingAddress?.LastName, customer?.LastName, " "),
                     Phone = dropOffPhone,
                     Email = customerEmail,
-                    Suburb = FirstNonEmpty(shippingAddress?.City, " "),
+                    Suburb = toSuburb,
                     City = FirstNonEmpty(shippingAddress?.City, " "),
                     State = FirstNonEmpty(shippingAddress?.Province, " "),
-                    Zip = FirstNonEmpty(shippingAddress?.Zip, " ")
+                    Zip = dropOffPCode
                 },
                 PickUp = new PickUpPerson
                 {
@@ -61,12 +85,12 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     LastName = FirstNonEmpty(billingAddress?.LastName, customer?.LastName, " "),
                     Phone = pickUpPhone,
                     Email = customerEmail,
-                    Suburb = FirstNonEmpty(billingAddress?.City, " "),
+                    Suburb = fromSuburb,
                     City = FirstNonEmpty(billingAddress?.City, " "),
                     State = FirstNonEmpty(billingAddress?.Province, " "),
-                    Zip = FirstNonEmpty(billingAddress?.Zip, " ")
+                    Zip = pickupPCode
                 },
-                Type = "ROAD",
+                Type = !string.IsNullOrEmpty(order.ToCounterCode) ? "DTC" : "ROAD",
                 PickUpDate = pickupDate.ToString("dd"),
                 PickUpTime = pickupDate.ToString("HH:mm"),
                 ParcelDimensions = lineItems.Select(item => new ParcelDimension
@@ -81,8 +105,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 }).ToList(),
                 PickUpCity = FirstNonEmpty(billingAddress?.City, " "),
                 DropOffCity = FirstNonEmpty(shippingAddress?.City, " "),
-                PickUpZip = FirstNonEmpty(billingAddress?.Zip, " "),
-                DropOffZip = FirstNonEmpty(shippingAddress?.Zip, " "),
+                PickUpZip = pickupPCode,
+                DropOffZip = dropOffPCode,
                 ShipmentType = string.Empty,
                 ToCounterCode = FirstNonEmpty(order.ToCounterCode, string.Empty),
                 ToCounterName = FirstNonEmpty(order.ToCounterName, string.Empty),
@@ -134,17 +158,31 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 ? shopifyOrder.line_items
                 : new List<ShopifyLineItem> { new() { sku = shopifyOrder.order_number.ToString(), quantity = 1 } };
 
+            var toCounterCode = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_code", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_code", StringComparison.OrdinalIgnoreCase))?.value ?? string.Empty;
+            var toCounterName = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_name", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_name", StringComparison.OrdinalIgnoreCase))?.value ?? string.Empty;
+            var isDtc = !string.IsNullOrEmpty(toCounterCode);
+
+            // Extract PUDO address if present in note attributes
+            var pudoAddr1 = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_addr1", StringComparison.OrdinalIgnoreCase))?.value;
+            var pudoCity = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_city", StringComparison.OrdinalIgnoreCase))?.value;
+            var pudoZip = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_zip", StringComparison.OrdinalIgnoreCase))?.value;
+
             // Map postal codes and suburbs to Skypoint-recognized values
             var pickupPCode = MapPostalCode(FirstNonEmpty(billingAddress?.zip, " "), FirstNonEmpty(billingAddress?.city, " "), configuration);
-            var dropOffPCode = MapPostalCode(FirstNonEmpty(shippingAddress?.zip, " "), FirstNonEmpty(shippingAddress?.city, " "), configuration);
+            var dropOffPCode = isDtc
+                ? MapPostalCode(FirstNonEmpty(pudoZip, shippingAddress?.zip, " "), FirstNonEmpty(pudoCity, shippingAddress?.city, " "), configuration)
+                : MapPostalCode(FirstNonEmpty(shippingAddress?.zip, " "), FirstNonEmpty(shippingAddress?.city, " "), configuration);
+
             var fromSuburb = MapSuburb(FirstNonEmpty(billingAddress?.city, " "), pickupPCode, configuration);
-            var toSuburb = MapSuburb(FirstNonEmpty(shippingAddress?.city, " "), dropOffPCode, configuration);
+            var toSuburb = isDtc
+                ? FirstNonEmpty(pudoCity, shippingAddress?.city, " ")
+                : MapSuburb(FirstNonEmpty(shippingAddress?.city, " "), dropOffPCode, configuration);
 
             return new BookingRequest
             {
                 UserId = skypointUserId,
                 PickUpAddress = FirstNonEmpty(billingAddress?.address1, " "),
-                DropOffAddress = FirstNonEmpty(shippingAddress?.address1, " "),
+                DropOffAddress = isDtc ? FirstNonEmpty(pudoAddr1, shippingAddress?.address1, " ") : FirstNonEmpty(shippingAddress?.address1, " "),
                 FromSuburb = fromSuburb,
                 ToSuburb = toSuburb,
                 PickUpPCode = pickupPCode,
@@ -155,13 +193,13 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 DropOff = new DropOffPerson
                 {
                     FirstName = FirstNonEmpty(shippingAddress?.first_name, customer?.first_name, " "),
-                    LastName = FirstNonEmpty(shippingAddress?.last_name, customer?.last_name, " "),
+                    LastName = FirstNonEmpty(shopifyOrder.shipping_address?.last_name, customer?.last_name, " "),
                     Phone = dropOffPhone,
                     Email = customerEmail,
-                    Suburb = toSuburb,
-                    City = FirstNonEmpty(shippingAddress?.city, " "),
+                    Suburb = isDtc ? "" : toSuburb,
+                    City = isDtc ? "" : FirstNonEmpty(shippingAddress?.city, " "),
                     State = FirstNonEmpty(shippingAddress?.province, " "),
-                    Zip = dropOffPCode
+                    Zip = isDtc ? "" : dropOffPCode
                 },
                 PickUp = new PickUpPerson
                 {
@@ -169,12 +207,12 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     LastName = FirstNonEmpty(billingAddress?.last_name, customer?.last_name, " "),
                     Phone = pickUpPhone,
                     Email = customerEmail,
-                    Suburb = fromSuburb,
-                    City = FirstNonEmpty(billingAddress?.city, " "),
-                    State = FirstNonEmpty(billingAddress?.province, " "),
-                    Zip = pickupPCode
+                    Suburb = isDtc ? " " : fromSuburb,
+                    City = isDtc ? " " : FirstNonEmpty(billingAddress?.city, " "),
+                    State = isDtc ? " " : FirstNonEmpty(billingAddress?.province, " "),
+                    Zip = isDtc ? " " : pickupPCode
                 },
-                Type = "ROAD",
+                Type = isDtc ? "DTC" : "ROAD",
                 PickUpDate = pickupDate.ToString("dd"),
                 PickUpTime = pickupDate.ToString("HH:mm"),
                 ParcelDimensions = lineItems.Select(item => new ParcelDimension
@@ -187,13 +225,13 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     ParcelReference = FirstNonEmpty(item.sku, item.title, shopifyOrder.order_number.ToString()),
                     SelectedParcel = parcelType
                 }).ToList(),
-                PickUpCity = FirstNonEmpty(billingAddress?.city, " "),
-                DropOffCity = FirstNonEmpty(shippingAddress?.city, " "),
-                PickUpZip = FirstNonEmpty(billingAddress?.zip, " "),
-                DropOffZip = FirstNonEmpty(shippingAddress?.zip, " "),
+                PickUpCity = isDtc ? " " : FirstNonEmpty(billingAddress?.city, " "),
+                DropOffCity = isDtc ? " " : FirstNonEmpty(shippingAddress?.city, " "),
+                PickUpZip = isDtc ? " " : pickupPCode,
+                DropOffZip = isDtc ? " " : dropOffPCode,
                 ShipmentType = string.Empty,
-                ToCounterCode = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_code", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_code", StringComparison.OrdinalIgnoreCase))?.value ?? string.Empty,
-                ToCounterName = shopifyOrder.note_attributes?.FirstOrDefault(attr => attr.name.Equals("pudo_name", StringComparison.OrdinalIgnoreCase) || attr.name.Equals("to_counter_name", StringComparison.OrdinalIgnoreCase))?.value ?? string.Empty,
+                ToCounterCode = toCounterCode,
+                ToCounterName = toCounterName,
                 SaIdNumber = string.Empty,
                 PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty)
             };

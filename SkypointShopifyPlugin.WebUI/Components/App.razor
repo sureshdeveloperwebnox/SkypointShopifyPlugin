@@ -32,11 +32,6 @@
                 window.skypointPudo.dotNetHelper = dotNetHelper;
                 window.skypointPudo.guid = guid;
                 
-                if (!window.skypointPudo.isListenerRegistered) {
-                    window.addEventListener('message', window.skypointPudo.receiveSkyPointMessage);
-                    window.skypointPudo.isListenerRegistered = true;
-                }
-                
                 console.log('Opening SkyPoint Selector URL:', widgetUrl);
                 
                 const width = 800;
@@ -57,6 +52,13 @@
                 }
             },
             
+            closePopup: function () {
+                if (window.skypointPudo.popupWindow) {
+                    window.skypointPudo.popupWindow.close();
+                    window.skypointPudo.popupWindow = null;
+                }
+            },
+            
             receiveSkyPointMessage: function (event) {
                 console.log('Message received from SkyPoint:', event.data);
                 
@@ -71,11 +73,7 @@
                 
                 if (data && data.result === 'success') {
                     console.log('SkyPoint selection success! GUID:', window.skypointPudo.guid);
-                    
-                    if (window.skypointPudo.popupWindow) {
-                        window.skypointPudo.popupWindow.close();
-                        window.skypointPudo.popupWindow = null;
-                    }
+                    window.skypointPudo.closePopup();
                     
                     if (window.skypointPudo.dotNetHelper) {
                         window.skypointPudo.dotNetHelper.invokeMethodAsync('OnPudoSelected', window.skypointPudo.guid);
@@ -83,6 +81,9 @@
                 }
             }
         };
+        
+        // Register listener globally on startup to prevent timing/re-registration issues
+        window.addEventListener('message', window.skypointPudo.receiveSkyPointMessage);
     </script>
 </body>
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SkypointShopifyPlugin.Core.DTOs.Skypoint;
 using SkypointShopifyPlugin.Core.Interfaces;
@@ -16,19 +17,22 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         private readonly ISkypointApiClient _skypointApiClient;
         private readonly ISkypointTokenStore _skypointTokenStore;
         private readonly IEcommercePlatformService _ecommercePlatformService;
+        private readonly IConfiguration _configuration;
 
         public SkypointOrderService(
             ILogger<SkypointOrderService> logger,
             ISkypointOrderStore orderStore,
             ISkypointApiClient skypointApiClient,
             ISkypointTokenStore skypointTokenStore,
-            IEcommercePlatformService ecommercePlatformService)
+            IEcommercePlatformService ecommercePlatformService,
+            IConfiguration configuration)
         {
             _logger = logger;
             _orderStore = orderStore;
             _skypointApiClient = skypointApiClient;
             _skypointTokenStore = skypointTokenStore;
             _ecommercePlatformService = ecommercePlatformService;
+            _configuration = configuration;
         }
 
         public async Task<SkypointOrderResponse> CreateOrderAsync(CreateSkypointOrderRequest request, bool autoProcess = true)
@@ -95,11 +99,11 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
         }
 
-        public async Task<SkypointOrderResponse> ProcessOrderAsync(string orderId)
+        public async Task<SkypointOrderResponse> ProcessOrderAsync(string orderId, bool force = false)
         {
             try
             {
-                _logger.LogInformation("Processing order {OrderId}", orderId);
+                _logger.LogInformation("Processing order {OrderId} (force: {Force})", orderId, force);
 
                 // Get order
                 var order = await _orderStore.GetOrderByIdAsync(orderId);
@@ -113,8 +117,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     };
                 }
 
-                // Check if already processed
-                if (await _orderStore.IsOrderProcessedAsync(orderId))
+                // Check if already processed (unless force-processing is requested)
+                if (!force && await _orderStore.IsOrderProcessedAsync(orderId))
                 {
                     _logger.LogInformation("Order {OrderId} already processed with booking {BookingId}", orderId, order.SkypointBookingId);
                     return new SkypointOrderResponse
@@ -129,22 +133,21 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
                 // Get Skypoint token and user ID
                 var vendorId = order.VendorId ?? "default";
-                var token = _skypointTokenStore.GetToken(vendorId);
-                var skypointUserId = _skypointTokenStore.GetUserId(vendorId);
+                var (token, skypointUserId) = await GetOrRefreshTokenAsync(vendorId);
 
                 if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(skypointUserId))
                 {
-                    _logger.LogError("No Skypoint credentials for vendor {VendorId}", vendorId);
+                    _logger.LogError("No Skypoint credentials/token for vendor {VendorId}", vendorId);
                     return new SkypointOrderResponse
                     {
                         Success = false,
-                        Message = "Skypoint credentials not configured",
+                        Message = "Skypoint credentials not configured or expired",
                         Order = order
                     };
                 }
 
                 // Map order to booking request
-                var bookingRequest = SkypointOrderMapper.MapToBookingRequest(order, skypointUserId);
+                var bookingRequest = SkypointOrderMapper.MapToBookingRequest(order, skypointUserId, _configuration);
 
                 // Create booking
                 var bookingResponse = await _skypointApiClient.CreateBookingAsync(bookingRequest, token);
@@ -300,11 +303,11 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
                 var trackNo = !string.IsNullOrEmpty(order.SkypointTrackNo) ? order.SkypointTrackNo : order.SkypointBookingId!;
                 var vendorId = order.VendorId ?? "default";
-                var token = _skypointTokenStore.GetToken(vendorId);
+                var (token, _) = await GetOrRefreshTokenAsync(vendorId);
 
                 if (string.IsNullOrEmpty(token))
                 {
-                    _logger.LogError("SkyPoint API credentials/token not configured for vendor {VendorId} when syncing order {OrderId}", vendorId, orderId);
+                    _logger.LogError("SkyPoint API credentials/token not configured or expired for vendor {VendorId} when syncing order {OrderId}", vendorId, orderId);
                     return false;
                 }
 
@@ -313,7 +316,9 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 if (trackingResponse == null || trackingResponse.TrackingInfo == null || trackingResponse.TrackingInfo.Count == 0)
                 {
                     _logger.LogWarning("No tracking events found for waybill {TrackNo} of order {OrderId}", trackNo, orderId);
-                    return false;
+                    order.UpdatedAt = DateTime.UtcNow;
+                    await _orderStore.UpdateOrderAsync(order);
+                    return true;
                 }
 
                 // Update order tracking history
@@ -375,6 +380,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             string toCounterCode,
             string toCounterName,
             string pudoAddress1,
+            string pudoSuburb,
             string pudoCity,
             string pudoZip,
             string pudoProvider)
@@ -400,6 +406,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 if (order.ShippingAddress != null)
                 {
                     order.ShippingAddress.Address1 = pudoAddress1;
+                    order.ShippingAddress.Address2 = pudoSuburb; // Save PUDO suburb in Address2
                     order.ShippingAddress.City = pudoCity;
                     order.ShippingAddress.Zip = pudoZip;
                 }
@@ -413,6 +420,50 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 _logger.LogError(ex, "Error updating order {OrderId} with PUDO details", orderId);
                 return false;
             }
+        }
+
+        private async Task<(string? token, string? userId)> GetOrRefreshTokenAsync(string vendorId)
+        {
+            var token = _skypointTokenStore.GetToken(vendorId);
+            var userId = _skypointTokenStore.GetUserId(vendorId);
+
+            if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(userId))
+            {
+                return (token, userId);
+            }
+
+            // Try to load credentials and authenticate
+            var creds = _skypointTokenStore.GetCredentials(vendorId);
+            if (creds == null)
+            {
+                _logger.LogWarning("No Skypoint credentials configured for vendor {VendorId}", vendorId);
+                return (null, null);
+            }
+
+            try
+            {
+                _logger.LogInformation("Attempting to login to Skypoint for vendor {VendorId} to refresh token...", vendorId);
+                var loginResponse = await _skypointApiClient.LoginAsync(new LoginRequest
+                {
+                    Username = creds.Value.username,
+                    Pwd = creds.Value.password
+                });
+
+                if (loginResponse?.Token?.TokenValue != null)
+                {
+                    token = loginResponse.Token.TokenValue;
+                    userId = loginResponse.Id;
+                    _skypointTokenStore.SaveToken(vendorId, token, loginResponse.Token.Expiration, userId);
+                    _logger.LogInformation("Successfully refreshed token for vendor {VendorId} (expires {Exp:u})", vendorId, loginResponse.Token.Expiration);
+                    return (token, userId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to login to Skypoint to refresh token for vendor {VendorId}", vendorId);
+            }
+
+            return (null, null);
         }
     }
 }

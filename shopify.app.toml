@@ -3,7 +3,7 @@
 client_id = "43cc9e72087b61c72649cbabcd052072"
 name = "Skypoint Shipping"
 handle = "skypoint-shipping"
-application_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev"
+application_url = "https://87c5-223-185-24-226.ngrok-free.app"
 embedded = false
 
 [build]
@@ -14,7 +14,7 @@ scopes = "read_orders,write_orders,read_products,write_products,read_shipping,wr
 
 [auth]
 redirect_urls = [
-  "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/auth"
+  "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/auth"
 ]
 
 [webhooks]
@@ -22,21 +22,21 @@ api_version = "2024-04"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/create" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/create"
+  uri = "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/orders/create"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/updated" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/updated"
+  uri = "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/orders/updated"
 
   [[webhooks.subscriptions]]
   topics = [ "orders/cancelled" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/orders/cancelled"
+  uri = "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/orders/cancelled"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
-  uri = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/app/uninstalled"
+  uri = "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/app/uninstalled"
 
 [webhooks.privacy_compliance]
-customer_deletion_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/customers/redact"
-customer_data_request_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/customers/data_request"
-aftershop_deletion_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/shop/redact"
+customer_deletion_url = "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/customers/redact"
+customer_data_request_url = "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/customers/data_request"
+aftershop_deletion_url = "https://87c5-223-185-24-226.ngrok-free.app/api/shopify/shop/redact"

@@ -16,7 +16,7 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         /// <summary>
         /// Process an existing order into a Skypoint booking
         /// </summary>
-        Task<SkypointOrderResponse> ProcessOrderAsync(string orderId);
+        Task<SkypointOrderResponse> ProcessOrderAsync(string orderId, bool force = false);
 
         /// <summary>
         /// Get an order by ID
@@ -61,6 +61,7 @@ namespace SkypointShopifyPlugin.Core.Interfaces
             string toCounterCode,
             string toCounterName,
             string pudoAddress1,
+            string pudoSuburb,
             string pudoCity,
             string pudoZip,
             string pudoProvider);

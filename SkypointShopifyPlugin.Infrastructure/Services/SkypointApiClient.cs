@@ -47,7 +47,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             var retryOptions = new RetryStrategyOptions
             {
                 ShouldHandle = new PredicateBuilder()
-                    .Handle<HttpRequestException>()
+                    .Handle<HttpRequestException>(ex => ex.StatusCode == null || (int)ex.StatusCode >= 500)
                     .Handle<TimeoutRejectedException>(),
                 BackoffType = DelayBackoffType.Exponential,
                 MaxRetryAttempts = 3,

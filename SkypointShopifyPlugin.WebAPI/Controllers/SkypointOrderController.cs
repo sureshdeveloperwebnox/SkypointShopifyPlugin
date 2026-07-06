@@ -57,11 +57,11 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         /// POST /api/skypoint/orders/{orderId}/process
         /// </summary>
         [HttpPost("{orderId}/process")]
-        public async Task<IActionResult> ProcessOrder(string orderId)
+        public async Task<IActionResult> ProcessOrder(string orderId, [FromQuery] bool force = false)
         {
-            _logger.LogInformation("Process order request for {OrderId}", orderId);
+            _logger.LogInformation("Process order request for {OrderId} (force: {Force})", orderId, force);
 
-            var result = await _orderService.ProcessOrderAsync(orderId);
+            var result = await _orderService.ProcessOrderAsync(orderId, force);
 
             if (result.Success)
             {
@@ -237,6 +237,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 request.ToCounterCode,
                 request.ToCounterName,
                 request.PudoAddress1,
+                request.PudoSuburb,
                 request.PudoCity,
                 request.PudoZip,
                 request.PudoProvider);

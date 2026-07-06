@@ -26,7 +26,7 @@ namespace SkypointShopifyPlugin.Core.DTOs.Configuration
         public string RegisterEndpoint { get; set; } = "/api/service/session/customer/register";
         public string RateEndpoint { get; set; } = "/api/service/rate/engine/quote";
         public string BookingEndpoint { get; set; } = "/api/service/booking/create";
-        public string PudoWidgetBaseUrl { get; set; } = "https://eocloudx.co.za/SkyOnlineSelect_Test/SkyPointSelectNoMap";
+        public string PudoWidgetBaseUrl { get; set; } = "https://eocloudx.co.za/SkyPointSelectNoMap";
         public int TimeoutSeconds { get; set; } = 30;
         public int MaxRetryAttempts { get; set; } = 3;
     }

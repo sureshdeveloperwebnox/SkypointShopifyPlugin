@@ -47,7 +47,7 @@ namespace SkypointShopifyPlugin.Core.Configuration
         /// <summary>
         /// Base URL for PUDO widget map selector
         /// </summary>
-        public string PudoWidgetBaseUrl { get; set; } = "https://eocloudx.co.za/SkyOnlineSelect_Test/SkyPointSelectNoMap";
+        public string PudoWidgetBaseUrl { get; set; } = "https://eocloudx.co.za/SkyPointSelectNoMap";
 
         /// <summary>
         /// Request timeout in seconds (optional - defaults to 30)

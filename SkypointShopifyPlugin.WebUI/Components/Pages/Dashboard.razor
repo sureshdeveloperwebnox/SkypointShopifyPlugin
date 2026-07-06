@@ -127,7 +127,15 @@
                             @foreach (var order in orders)
                             {
                                 <tr class="table-row-custom" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 0.9rem; cursor: pointer; transition: background 0.2s;" @onclick="() => ToggleSelectOrder(order)">
-                                    <td style="padding: 14px 16px; font-weight: 700; color: #ffffff;">#@order.OrderNumber</td>
+                                    <td style="padding: 14px 16px; font-weight: 700; color: #ffffff;">
+                                        #@order.OrderNumber
+                                        @if (!string.IsNullOrEmpty(order.ToCounterCode))
+                                        {
+                                            <div style="font-size: 0.7rem; color: #34d399; font-weight: normal; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
+                                                <i class="fas fa-map-marker-alt" style="font-size: 0.75rem;"></i> PUDO: @order.ToCounterName (@order.ToCounterCode)
+                                            </div>
+                                        }
+                                    </td>
                                     <td style="padding: 14px 16px; color: #cbd5e1;">@order.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                                     <td style="padding: 14px 16px;"><span class="badge-source" style="padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: rgba(59, 130, 246, 0.2); color: #60a5fa;">@order.OrderSource</span></td>
                                     <td style="padding: 14px 16px; font-family: monospace; color: #f43f5e;">@(order.SkypointTrackNo ?? order.SkypointBookingId ?? "-")</td>
@@ -137,9 +145,23 @@
                                         </span>
                                     </td>
                                     <td style="padding: 14px 16px; text-align: right;" @onclick:stopPropagation="true">
-                                        <button @onclick="() => SyncOrderTracking(order)" class="btn-sync" style="background: rgba(255, 30, 39, 0.15); border: 1px solid rgba(255, 30, 39, 0.25); border-radius: 6px; color: #ff1e27; padding: 0.3rem 0.6rem; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">
-                                            Sync Status
-                                        </button>
+                                        @if (string.IsNullOrEmpty(order.SkypointTrackNo) && string.IsNullOrEmpty(order.SkypointBookingId))
+                                        {
+                                            <button @onclick="() => ProcessOrderBooking(order, false)" class="btn-sync" style="background: rgba(52, 211, 153, 0.15); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 6px; color: #34d399; padding: 0.3rem 0.6rem; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; font-weight: 700;">
+                                                Book Shipment
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                                                <button @onclick="() => ProcessOrderBooking(order, true)" class="btn-sync" style="background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 6px; color: #60a5fa; padding: 0.3rem 0.6rem; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">
+                                                    Re-Book
+                                                </button>
+                                                <button @onclick="() => SyncOrderTracking(order)" class="btn-sync" style="background: rgba(255, 30, 39, 0.15); border: 1px solid rgba(255, 30, 39, 0.25); border-radius: 6px; color: #ff1e27; padding: 0.3rem 0.6rem; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">
+                                                    Sync Status
+                                                </button>
+                                            </div>
+                                        }
                                     </td>
                                 </tr>
                                 @if (selectedOrder?.Id == order.Id)
@@ -641,6 +663,52 @@
         }
     }
 
+    private async Task ProcessOrderBooking(SkypointOrder order, bool force = false)
+    {
+        isLoadingOrders = true;
+        StateHasChanged();
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"api/skypoint/orders/{order.Id}/process{(force ? "?force=true" : "")}");
+            if (!string.IsNullOrEmpty(token))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                carrierMessage = $"Successfully created Skypoint booking for order #{order.OrderNumber}!";
+                await LoadOrders();
+                if (selectedOrder != null && selectedOrder.Id == order.Id)
+                {
+                    selectedOrder = orders.FirstOrDefault(o => o.Id == order.Id);
+                }
+            }
+            else
+            {
+                try
+                {
+                    var errResult = await response.Content.ReadFromJsonAsync<SkypointOrderResponse>();
+                    carrierMessage = $"Failed to book: {errResult?.Message ?? "Server error"}";
+                }
+                catch
+                {
+                    carrierMessage = "Failed to book: Server returned an error status.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            carrierMessage = $"Failed to process booking: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingOrders = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task LaunchPudoSelection(SkypointOrder order)
     {
         isLoadingPudoSelection = true;
@@ -670,6 +738,49 @@
                 {
                     var dotNetHelper = DotNetObjectReference.Create(this);
                     await JSRuntime.InvokeVoidAsync("skypointPudo.openPudoSelector", result.Guid, result.WidgetUrl, dotNetHelper);
+
+                    // Start background polling fallback in case window postMessage is blocked (e.g. inside iframes/popups)
+                    _ = Task.Run(async () =>
+                    {
+                        var guid = result.Guid;
+                        var shopDomain = string.IsNullOrEmpty(Shop) ? "deeprintztestapp.myshopify.com" : Shop;
+                        
+                        // Poll every 2.5 seconds for up to 5 minutes (120 attempts)
+                        for (int i = 0; i < 120; i++)
+                        {
+                            await Task.Delay(2500);
+                            
+                            // Stop if already completed (e.g. by message listener)
+                            if (!isLoadingPudoSelection) break;
+                            
+                            try
+                            {
+                                using var checkRequest = new HttpRequestMessage(HttpMethod.Get, $"api/pudo/selected/{guid}?shop={Uri.EscapeDataString(shopDomain)}");
+                                if (!string.IsNullOrEmpty(token))
+                                {
+                                    checkRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                                }
+                                
+                                var checkResponse = await Http.SendAsync(checkRequest);
+                                if (checkResponse.IsSuccessStatusCode)
+                                {
+                                    var checkResult = await checkResponse.Content.ReadFromJsonAsync<SelectedPudoResponse>();
+                                    if (checkResult != null && checkResult.Success && checkResult.PudoPoint != null && !string.IsNullOrEmpty(guid))
+                                    {
+                                        // User successfully selected a point! Trigger selection handler on the UI thread
+                                        await InvokeAsync(async () => {
+                                            await OnPudoSelected(guid);
+                                        });
+                                        break;
+                                    }
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                // Ignore transient network/routing errors during polling
+                            }
+                        }
+                    });
                 }
                 else
                 {
@@ -698,6 +809,9 @@
     {
         try
         {
+            // Explicitly close the popup in case of polling or browser restrictions
+            await JSRuntime.InvokeVoidAsync("skypointPudo.closePopup");
+
             var shopDomain = string.IsNullOrEmpty(Shop) ? "deeprintztestapp.myshopify.com" : Shop;
             using var request = new HttpRequestMessage(HttpMethod.Get, $"api/pudo/selected/{guid}?shop={Uri.EscapeDataString(shopDomain)}");
 
@@ -725,6 +839,7 @@
                         if (selectedOrder.ShippingAddress != null)
                         {
                             selectedOrder.ShippingAddress.Address1 = point.Addr1;
+                            selectedOrder.ShippingAddress.Address2 = point.Suburb;
                             selectedOrder.ShippingAddress.City = point.City;
                             selectedOrder.ShippingAddress.Zip = point.Pcode;
                         }
@@ -740,6 +855,7 @@
                             ToCounterCode = point.Code,
                             ToCounterName = point.Name,
                             PudoAddress1 = point.Addr1,
+                            PudoSuburb = point.Suburb,
                             PudoCity = point.City,
                             PudoZip = point.Pcode,
                             PudoProvider = point.Provider
