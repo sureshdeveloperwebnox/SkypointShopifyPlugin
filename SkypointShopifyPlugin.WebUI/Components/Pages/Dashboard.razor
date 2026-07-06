@@ -350,20 +350,42 @@
 
                                                     </div>
 
-                                                    <!-- Proceed Button -->
-                                                    <div style="display: flex; justify-content: flex-end; margin-top: 24px;">
-                                                        @if (isLoadingPudoSelection)
-                                                        {
-                                                            <button class="btn-sync" style="background: rgba(255, 30, 39, 0.15); border: 1px solid rgba(255, 30, 39, 0.25); border-radius: 8px; padding: 10px 24px; color: #ff1e27; font-weight: bold; cursor: not-allowed; display: flex; align-items: center; gap: 8px;" disabled>
-                                                                <i class="fas fa-spinner fa-spin"></i> Processing...
-                                                            </button>
-                                                        }
-                                                        else
-                                                        {
-                                                            <button @onclick="() => LaunchPudoSelection(order)" @onclick:stopPropagation="true" class="btn-sync" style="background: #ff1e27; border: none; border-radius: 8px; padding: 10px 24px; color: white; font-weight: bold; cursor: pointer; transition: all 0.2s;">
-                                                                Proceed
-                                                            </button>
-                                                        }
+                                                    <!-- Proceed / Change PUDO Button -->
+                                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; width: 100%;">
+                                                        <div>
+                                                            @if (!string.IsNullOrEmpty(order.SkypointTrackNo))
+                                                            {
+                                                                <div style="color: #38bdf8; font-weight: bold; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 8px;">
+                                                                    <i class="fas fa-shipping-fast"></i> Waybill: @order.SkypointTrackNo
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                        
+                                                        <div style="display: flex; gap: 12px; align-items: center;">
+                                                            @if (isLoadingPudoSelection)
+                                                            {
+                                                                <button class="btn-sync" style="background: rgba(255, 30, 39, 0.15); border: 1px solid rgba(255, 30, 39, 0.25); border-radius: 8px; padding: 10px 24px; color: #ff1e27; font-weight: bold; cursor: not-allowed; display: flex; align-items: center; gap: 8px;" disabled>
+                                                                    <i class="fas fa-spinner fa-spin"></i> Processing...
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                @if (!string.IsNullOrEmpty(order.ToCounterCode))
+                                                                {
+                                                                    <!-- Counter is already selected. Show Change Counter button instead of Proceed -->
+                                                                    <button @onclick="() => LaunchPudoSelection(order)" @onclick:stopPropagation="true" class="btn-sync" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 24px; color: #e2e8f0; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+                                                                        Change PUDO Counter
+                                                                    </button>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <!-- Counter not selected yet. Show Proceed button to prompt selection -->
+                                                                    <button @onclick="() => LaunchPudoSelection(order)" @onclick:stopPropagation="true" class="btn-sync" style="background: #ff1e27; border: none; border-radius: 8px; padding: 10px 24px; color: white; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+                                                                        Proceed
+                                                                    </button>
+                                                                }
+                                                            }
+                                                        </div>
                                                     </div>
 
                                                 </div>
