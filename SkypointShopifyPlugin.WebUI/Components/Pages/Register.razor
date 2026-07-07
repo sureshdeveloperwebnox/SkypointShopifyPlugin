@@ -2,92 +2,161 @@
 @layout LoginLayout
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
+@using System.ComponentModel.DataAnnotations
 
-<div class="auth-card" style="max-width: 550px;">
-    <div class="text-center mb-4">
-        <h4 class="auth-card-title">Register as a SkyNet Client</h4>
-        <p class="auth-card-subtitle">Complete the fields below to create your account</p>
+<div class="split-layout-container">
+    <!-- Left Feature Pane -->
+    <div class="split-left-pane">
+        <div class="left-pane-pill">
+            <i class="fas fa-user-plus mr-2"></i> New Customer
+        </div>
+        <h1 class="left-pane-title">
+            Join SkyNet Online<br />
+            in minutes
+        </h1>
+        <p class="left-pane-desc">
+            Create your free account and start sending packages locally and internationally — no paperwork, no hassle.
+        </p>
+
+        <div class="left-pane-features">
+            <div class="feature-item">
+                <div class="feature-icon-wrapper" style="font-weight: 800; font-size: 0.95rem;">
+                    1
+                </div>
+                <div>
+                    <div class="feature-text-title">Create your account</div>
+                    <div class="feature-text-desc">Fill in your personal details and set a secure password.</div>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <div class="feature-icon-wrapper" style="font-weight: 800; font-size: 0.95rem;">
+                    2
+                </div>
+                <div>
+                    <div class="feature-text-title">Top up your wallet</div>
+                    <div class="feature-text-desc">Add funds via card, EFT, or any supported payment method.</div>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <div class="feature-icon-wrapper" style="font-weight: 800; font-size: 0.95rem;">
+                    3
+                </div>
+                <div>
+                    <div class="feature-text-title">Ship your first parcel</div>
+                    <div class="feature-text-desc">Create a waybill, print your label, and drop off your package.</div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <EditForm Model="@regModel" OnValidSubmit="HandleRegistration">
-        <DataAnnotationsValidator />
-        
-        <div class="row">
-            <div class="col-md-6 form-group-custom">
-                <label class="form-label-custom" for="firstName">First Name</label>
-                <div class="input-container">
-                    <InputText id="firstName" class="form-input-custom" placeholder="John" @bind-Value="regModel.FirstName" required />
+    <!-- Right Form Pane -->
+    <div class="split-right-pane">
+        <div class="form-card-wrapper" style="max-width: 540px;">
+            <div class="form-pill-badge">
+                Customer Registration
+            </div>
+            <h2 class="form-welcome-title">Create your account</h2>
+            <p class="form-welcome-subtitle">All fields are required unless marked optional.</p>
+
+            <EditForm Model="@regModel" OnValidSubmit="HandleRegistration">
+                <DataAnnotationsValidator />
+
+                <div style="font-size: 0.85rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">
+                    Personal Details
                 </div>
-                <ValidationMessage For="@(() => regModel.FirstName)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-            </div>
 
-            <div class="col-md-6 form-group-custom">
-                <label class="form-label-custom" for="lastName">Last Name</label>
-                <div class="input-container">
-                    <InputText id="lastName" class="form-input-custom" placeholder="Doe" @bind-Value="regModel.LastName" required />
+                <div style="display: flex; gap: 1rem; width: 100%;">
+                    <div class="form-group-light" style="flex: 1;">
+                        <label class="form-label-light" for="firstName">First Name</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-user input-icon-left"></i>
+                            <InputText id="firstName" class="form-input-light" placeholder="Name" @bind-Value="regModel.FirstName" required />
+                        </div>
+                        <ValidationMessage For="@(() => regModel.FirstName)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
+                    </div>
+
+                    <div class="form-group-light" style="flex: 1;">
+                        <label class="form-label-light" for="lastName">Surname</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-user input-icon-left"></i>
+                            <InputText id="lastName" class="form-input-light" placeholder="Surname" @bind-Value="regModel.LastName" required />
+                        </div>
+                        <ValidationMessage For="@(() => regModel.LastName)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
+                    </div>
                 </div>
-                <ValidationMessage For="@(() => regModel.LastName)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-            </div>
-        </div>
 
-        <div class="form-group-custom">
-            <label class="form-label-custom" for="email">Email Address</label>
-            <div class="input-container">
-                <InputText id="email" type="email" class="form-input-custom" placeholder="john.doe@example.com" @bind-Value="regModel.Email" required />
-            </div>
-            <ValidationMessage For="@(() => regModel.Email)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-        </div>
-
-        <div class="form-group-custom">
-            <label class="form-label-custom" for="phone">Mobile Number</label>
-            <div class="input-container">
-                <InputText id="phone" type="tel" class="form-input-custom" placeholder="+27 82 123 4567" @bind-Value="regModel.Phone" required />
-            </div>
-            <ValidationMessage For="@(() => regModel.Phone)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-        </div>
-
-        <div class="form-group-custom">
-            <label class="form-label-custom" for="accountNumber">SkyNet Account Number</label>
-            <div class="input-container">
-                <InputText id="accountNumber" class="form-input-custom" placeholder="J12345 (Optional)" @bind-Value="regModel.AccountNumber" />
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-md-6 form-group-custom">
-                <label class="form-label-custom" for="password">Password</label>
-                <div class="input-container">
-                    <input type="@PasswordType" id="password" class="form-input-custom" placeholder="••••••••" @bind="regModel.Password" minlength="6" required />
-                    <i class="@PasswordToggleIcon password-toggle-icon" @onclick="TogglePasswordVisibility"></i>
+                <div class="form-group-light">
+                    <label class="form-label-light" for="phone">Mobile Number</label>
+                    <div class="input-container-light">
+                        <i class="fas fa-phone input-icon-left"></i>
+                        <InputText id="phone" type="tel" class="form-input-light" placeholder="Mobile number" @bind-Value="regModel.Phone" required />
+                    </div>
+                    <ValidationMessage For="@(() => regModel.Phone)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
                 </div>
-                <ValidationMessage For="@(() => regModel.Password)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-            </div>
 
-            <div class="col-md-6 form-group-custom">
-                <label class="form-label-custom" for="confirmPassword">Confirm Password</label>
-                <div class="input-container">
-                    <input type="@PasswordType" id="confirmPassword" class="form-input-custom" placeholder="••••••••" @bind="regModel.ConfirmPassword" required />
+                <div class="form-group-light">
+                    <label class="form-label-light" for="email">Email Address</label>
+                    <div class="input-container-light">
+                        <i class="fas fa-envelope input-icon-left"></i>
+                        <InputText id="email" type="email" class="form-input-light" placeholder="Email" @bind-Value="regModel.Email" required />
+                    </div>
+                    <ValidationMessage For="@(() => regModel.Email)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
                 </div>
-                <ValidationMessage For="@(() => regModel.ConfirmPassword)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-            </div>
-        </div>
 
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <div class="msg error" style="display: block;">@errorMessage</div>
-        }
-        @if (!string.IsNullOrEmpty(successMessage))
-        {
-            <div class="msg success" style="display: block;">@successMessage</div>
-        }
+                <div class="form-group-light">
+                    <label class="form-label-light" for="accountNumber">Sales Code <span style="text-transform: lowercase; font-weight: normal; color: #94a3b8;">(optional)</span></label>
+                    <div class="input-container-light">
+                        <i class="fas fa-tag input-icon-left"></i>
+                        <InputText id="accountNumber" class="form-input-light" placeholder="Sales code (Optional)" @bind-Value="regModel.AccountNumber" />
+                    </div>
+                </div>
 
-        <div class="mt-4">
-            <button type="submit" class="btn-skynet-primary" disabled="@isSubmitting">
-                @(isSubmitting ? "Creating Account..." : "Create Account")
-            </button>
-            <a role="button" class="btn-skynet-secondary text-center d-block mt-2" href="@GetLoginUrl()">Back to Login</a>
+                <div style="display: flex; gap: 1rem; width: 100%;">
+                    <div class="form-group-light" style="flex: 1;">
+                        <label class="form-label-light" for="password">Password</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-lock input-icon-left"></i>
+                            <input type="@PasswordType" id="password" class="form-input-light" placeholder="Password" @bind="regModel.Password" minlength="6" required />
+                            <i class="@PasswordToggleIcon password-toggle-light" @onclick="TogglePasswordVisibility"></i>
+                        </div>
+                        <ValidationMessage For="@(() => regModel.Password)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
+                    </div>
+
+                    <div class="form-group-light" style="flex: 1;">
+                        <label class="form-label-light" for="confirmPassword">Confirm Password</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-lock input-icon-left"></i>
+                            <input type="@PasswordType" id="confirmPassword" class="form-input-light" placeholder="Confirm password" @bind="regModel.ConfirmPassword" required />
+                        </div>
+                        <ValidationMessage For="@(() => regModel.ConfirmPassword)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="msg error" style="display: block; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; padding: 10px 15px; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.9rem;">@errorMessage</div>
+                }
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="msg success" style="display: block; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10b981; padding: 10px 15px; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.9rem;">@successMessage</div>
+                }
+
+                <button type="submit" class="btn-skynet-red" disabled="@isSubmitting">
+                    <i class="fas fa-user-check mr-2"></i> @(isSubmitting ? "Creating Account..." : "Create my account")
+                </button>
+
+                <button type="button" class="btn-skynet-outline-red" @onclick="LoginAsGuest">
+                    <i class="fas fa-user-clock mr-2"></i> Continue as a Guest instead
+                </button>
+
+                <div style="text-align: center; margin-top: 2rem; font-size: 0.9rem; color: #64748b;">
+                    Already have an account? <a href="@GetLoginUrl()" class="form-link-highlight">Sign in here &rarr;</a>
+                </div>
+            </EditForm>
         </div>
-    </EditForm>
+    </div>
 </div>
 
 @code {
@@ -111,6 +180,11 @@
     private string GetLoginUrl()
     {
         return string.IsNullOrEmpty(Shop) ? "/login" : $"/login?shop={Uri.EscapeDataString(Shop)}";
+    }
+
+    private void LoginAsGuest()
+    {
+        errorMessage = "Guest checkout is active by default at store frontends. Please register or sign in to configure your backend integrations.";
     }
 
     private async Task HandleRegistration()

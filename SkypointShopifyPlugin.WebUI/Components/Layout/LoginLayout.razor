@@ -1,22 +1,48 @@
 @inherits LayoutComponentBase
 @inject NavigationManager NavigationManager
 
-<div class="auth-layout">
+<div class="auth-layout" style="background-color: #f8fafc;">
     <!-- Top Navbar -->
-    <nav class="navbar auth-navbar">
-        <div class="navbar-container">
-            <a class="navbar-brand" href="/">
-                <img src="images/skynet_logo.jpeg" alt="SkyNet Logo" style="height: 40px; vertical-align: middle; border-radius: 4px;" />
-            </a>
-            <div class="navbar-links">
-                <a href="@GetLink("/register")" class="nav-link-btn @(IsActive("/register") ? "active" : "")">Register</a>
-                <a href="@GetLink("/login")" class="nav-link-btn @(IsActive("/login") ? "active" : "")">Login</a>
+    <nav class="navbar navbar-skynet">
+        <div class="navbar-container" style="max-width: 100%; width: 100%;">
+            <!-- Left Link -->
+            <div style="flex: 1; display: flex; justify-content: flex-start;">
+                <a href="/" class="nav-link-btn-red" style="font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-home" style="color: #ff1e27;"></i> Home
+                </a>
+            </div>
+            
+            <!-- Center Logo -->
+            <div style="flex: 1; display: flex; justify-content: center;">
+                <a href="/">
+                    <img src="images/skynet_logo.jpeg" alt="SkyNet Logo" style="height: 48px; vertical-align: middle;" />
+                </a>
+            </div>
+            
+            <!-- Right Links -->
+            <div class="navbar-links" style="flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: 1.5rem;">
+                @if (IsActive("/login"))
+                {
+                    <a href="@GetLink("/login")" class="nav-link-btn-outline" style="padding: 0.4rem 1.5rem; text-decoration: none;">Login</a>
+                    <a href="@GetLink("/register")" class="btn-skynet-red" style="width: auto; padding: 0.5rem 1.5rem; border-radius: 50px; font-size: 0.95rem; text-decoration: none;">Register</a>
+                }
+                else if (IsActive("/register"))
+                {
+                    <a href="@GetLink("/login")" class="nav-link-btn-red" style="text-decoration: none; font-weight: 700;">Login</a>
+                    <a href="@GetLink("/register")" class="nav-link-btn-outline" style="padding: 0.4rem 1.5rem; text-decoration: none;">Register</a>
+                }
+                else
+                {
+                    <a href="@GetLink("/login")" class="nav-link-btn-red" style="text-decoration: none; font-weight: 700;">Login</a>
+                    <a href="@GetLink("/register")" class="btn-skynet-red" style="width: auto; padding: 0.5rem 1.5rem; border-radius: 50px; font-size: 0.95rem; text-decoration: none;">Register</a>
+                }
+                <a href="https://www.skynet.co.za/contact-us" target="_blank" class="nav-link-btn-red" style="font-weight: 700; text-decoration: none;">Contact Us</a>
             </div>
         </div>
     </nav>
 
-    <!-- Page Content -->
-    <div class="auth-content">
+    <!-- Page Content (Split Layout fills space) -->
+    <div style="display: flex; flex-direction: column; flex: 1; width: 100%;">
         @Body
     </div>
 </div>

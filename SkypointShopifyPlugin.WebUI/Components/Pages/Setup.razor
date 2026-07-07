@@ -2,102 +2,114 @@
 @inject HttpClient Http
 @inject ProtectedSessionStorage SessionStorage
 @inject NavigationManager NavigationManager
+@using SkypointShopifyPlugin.Core.DTOs.Configuration
 
-<div class="auth-content" style="background-image: linear-gradient(rgba(11, 15, 25, 0.8), rgba(11, 15, 25, 0.85)), url('images/skynet_bg.jpg'); background-size: cover; background-position: center; background-repeat: no-repeat; width: 100%; min-height: calc(100vh - 65px); display: flex; justify-content: center; align-items: center; padding: 2rem 0;">
-    <div class="auth-card" style="max-width: 800px; width: 90%; max-height: 85vh; overflow-y: auto; margin: auto;">
-        <div class="text-center mb-4">
-            <h4 class="auth-card-title">Centralized Configuration</h4>
-            <p class="auth-card-subtitle">Set up your Shopify and Skypoint API credentials</p>
+<div class="dashboard-wrapper" style="background-color: #f8fafc; color: #1e293b; min-height: 100vh; padding: 3rem 4rem; font-family: 'Outfit', 'Inter', sans-serif;">
+    <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.02); max-width: 900px; width: 100%; margin: 0 auto; padding: 2.5rem;">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <h2 style="font-size: 2rem; font-weight: 800; color: #0f172a; margin-bottom: 0.5rem;">Centralized Configuration</h2>
+            <p style="font-size: 1rem; color: #64748b;">Set up your Shopify and SkyPoint API credentials and default parameters.</p>
         </div>
 
         @if (!isLoaded)
         {
-            <div class="text-center py-4" style="color: #cbd5e1;">
-                <i class="fas fa-spinner fa-spin mr-2"></i> Loading configuration...
+            <div class="text-center py-4" style="color: #64748b;">
+                <i class="fas fa-spinner fa-spin mr-2" style="color: #ff1e27;"></i> Loading configuration...
             </div>
         }
         else
         {
             <EditForm Model="@config" OnValidSubmit="SaveConfiguration">
                 <!-- Shopify Configuration -->
-                <div class="section-title-custom form-label-custom" style="font-size: 1rem; border-bottom: 1px solid rgba(255, 30, 39, 0.3); padding-bottom: 5px; margin-bottom: 15px; color: #ff1e27;">Shopify Configuration</div>
-                <div class="row">
-                    <div class="col-md-6 form-group-custom">
-                        <label class="form-label-custom" for="shopifyClientId">Client ID</label>
-                        <div class="input-container">
-                            <InputText id="shopifyClientId" class="form-input-custom" placeholder="Shopify Client ID" @bind-Value="config.Shopify.ClientId" required />
+                <div style="font-size: 1.1rem; font-weight: 800; border-bottom: 2px solid #ff1e27; padding-bottom: 6px; margin-bottom: 20px; color: #ff1e27; text-transform: uppercase; letter-spacing: 0.5px;">Shopify Configuration</div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="shopifyClientId">Client ID</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-id-badge input-icon-left"></i>
+                            <InputText id="shopifyClientId" class="form-input-light" placeholder="Shopify Client ID" @bind-Value="@config.Shopify.ClientId" required />
                         </div>
                     </div>
-                    <div class="col-md-6 form-group-custom">
-                        <label class="form-label-custom" for="shopifyClientSecret">Client Secret</label>
-                        <div class="input-container">
-                            <input type="password" id="shopifyClientSecret" class="form-input-custom" placeholder="Shopify Client Secret" @bind="config.Shopify.ClientSecret" required />
-                        </div>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-6 form-group-custom">
-                        <label class="form-label-custom" for="shopifyRedirectUri">Redirect URI</label>
-                        <div class="input-container">
-                            <InputText id="shopifyRedirectUri" class="form-input-custom" placeholder="https://.../api/shopify/auth" @bind-Value="config.Shopify.RedirectUri" required />
-                        </div>
-                    </div>
-                    <div class="col-md-6 form-group-custom">
-                        <label class="form-label-custom" for="shopifyWebhookSecret">Webhook Secret</label>
-                        <div class="input-container">
-                            <input type="password" id="shopifyWebhookSecret" class="form-input-custom" placeholder="Shopify Webhook Secret" @bind="config.Shopify.WebhookSecret" required />
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="shopifyClientSecret">Client Secret</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-key input-icon-left"></i>
+                            <input type="password" id="shopifyClientSecret" class="form-input-light" placeholder="Shopify Client Secret" @bind="@config.Shopify.ClientSecret" required />
                         </div>
                     </div>
                 </div>
 
-
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="shopifyRedirectUri">Redirect URI</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-link input-icon-left"></i>
+                            <InputText id="shopifyRedirectUri" class="form-input-light" placeholder="https://.../api/shopify/auth" @bind-Value="@config.Shopify.RedirectUri" required />
+                        </div>
+                    </div>
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="shopifyWebhookSecret">Webhook Secret</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-shield-alt input-icon-left"></i>
+                            <input type="password" id="shopifyWebhookSecret" class="form-input-light" placeholder="Shopify Webhook Secret" @bind="@config.Shopify.WebhookSecret" required />
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Parcel Dimensions -->
-                <div class="section-divider" style="border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 1.5rem 0; padding-top: 1rem;"></div>
-                <div class="section-title-custom form-label-custom" style="font-size: 1rem; border-bottom: 1px solid rgba(255, 30, 39, 0.3); padding-bottom: 5px; margin-bottom: 15px; color: #ff1e27;">Default Parcel Dimensions</div>
-                <div class="row">
-                    <div class="col-md-3 col-6 form-group-custom">
-                        <label class="form-label-custom" for="parcelLength">Length (cm)</label>
-                        <div class="input-container">
-                            <InputNumber id="parcelLength" class="form-input-custom" placeholder="10.0" @bind-Value="config.SkypointMappings.DefaultParcelLength" required />
+                <div style="font-size: 1.1rem; font-weight: 800; border-bottom: 2px solid #ff1e27; padding-bottom: 6px; margin-bottom: 20px; color: #ff1e27; text-transform: uppercase; letter-spacing: 0.5px;">Default Parcel Dimensions</div>
+                
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;">
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="parcelLength">Length (cm)</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-ruler-horizontal input-icon-left"></i>
+                            <InputNumber id="parcelLength" class="form-input-light" placeholder="10.0" @bind-Value="@config.SkypointMappings.DefaultParcelLength" required />
                         </div>
                     </div>
-                    <div class="col-md-3 col-6 form-group-custom">
-                        <label class="form-label-custom" for="parcelBreadth">Breadth (cm)</label>
-                        <div class="input-container">
-                            <InputNumber id="parcelBreadth" class="form-input-custom" placeholder="10.0" @bind-Value="config.SkypointMappings.DefaultParcelBreadth" required />
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="parcelBreadth">Breadth (cm)</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-ruler-combined input-icon-left"></i>
+                            <InputNumber id="parcelBreadth" class="form-input-light" placeholder="10.0" @bind-Value="@config.SkypointMappings.DefaultParcelBreadth" required />
                         </div>
                     </div>
-                    <div class="col-md-3 col-6 form-group-custom">
-                        <label class="form-label-custom" for="parcelHeight">Height (cm)</label>
-                        <div class="input-container">
-                            <InputNumber id="parcelHeight" class="form-input-custom" placeholder="10.0" @bind-Value="config.SkypointMappings.DefaultParcelHeight" required />
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="parcelHeight">Height (cm)</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-arrows-alt-v input-icon-left"></i>
+                            <InputNumber id="parcelHeight" class="form-input-light" placeholder="10.0" @bind-Value="@config.SkypointMappings.DefaultParcelHeight" required />
                         </div>
                     </div>
-                    <div class="col-md-3 col-6 form-group-custom">
-                        <label class="form-label-custom" for="parcelMass">Mass (kg)</label>
-                        <div class="input-container">
-                            <InputNumber id="parcelMass" class="form-input-custom" placeholder="0.5" @bind-Value="config.SkypointMappings.DefaultParcelMass" required />
+                    <div class="form-group-light">
+                        <label class="form-label-light" for="parcelMass">Mass (kg)</label>
+                        <div class="input-container-light">
+                            <i class="fas fa-weight-hanging input-icon-left"></i>
+                            <InputNumber id="parcelMass" class="form-input-light" placeholder="0.5" @bind-Value="@config.SkypointMappings.DefaultParcelMass" required />
                         </div>
                     </div>
                 </div>
 
                 @if (!string.IsNullOrEmpty(successMessage))
                 {
-                    <div class="msg success" style="display: block;">
+                    <div class="msg success" style="display: block; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10b981; padding: 12px 18px; border-radius: 6px; margin-bottom: 2rem;">
                         <strong>✓ Configuration Saved Successfully!</strong><br>
                         @successMessage
                     </div>
                 }
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
-                    <div class="msg error" style="display: block;">@errorMessage</div>
+                    <div class="msg error" style="display: block; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; padding: 12px 18px; border-radius: 6px; margin-bottom: 2rem;">@errorMessage</div>
                 }
 
-                <div class="mt-4">
-                    <button type="submit" class="btn-skynet-primary" disabled="@isSaving">
-                        @(isSaving ? "Saving..." : "Save Configuration")
+                <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+                    <button type="submit" class="btn-skynet-red" disabled="@isSaving" style="flex: 1;">
+                        <i class="fas fa-save mr-2"></i> @(isSaving ? "Saving..." : "Save Configuration")
                     </button>
+                    <a href="/" class="btn-skynet-outline-red" style="flex: 1; margin: 0; text-align: center; line-height: 1.5;">
+                        <i class="fas fa-times mr-2"></i> Cancel
+                    </a>
                 </div>
             </EditForm>
         }

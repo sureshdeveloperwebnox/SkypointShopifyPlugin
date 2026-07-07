@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "WuJqqreOlRY=",
+  "dgSpecHash": "uu4+V7lHBf8=",
   "success": true,
-  "projectFilePath": "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj",
+  "projectFilePath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\sures\\.nuget\\packages\\mediatr\\14.1.0\\mediatr.14.1.0.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\mediatr.contracts\\2.0.1\\mediatr.contracts.2.0.1.nupkg.sha512",

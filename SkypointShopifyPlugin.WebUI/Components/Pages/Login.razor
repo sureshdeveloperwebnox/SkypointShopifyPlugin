@@ -3,70 +3,120 @@
 @inject HttpClient Http
 @inject ProtectedSessionStorage SessionStorage
 @inject NavigationManager NavigationManager
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json
 
-<div class="auth-card skypoint-card">
-    <div class="text-center mb-4">
-        <h4 class="auth-card-title skypoint-title">SkyPoint Online Portal</h4>
-        <p class="auth-card-subtitle skypoint-subtitle">Connect your SkyPoint merchant account</p>
+<div class="split-layout-container">
+    <!-- Left Feature Pane -->
+    <div class="split-left-pane">
+        <div class="left-pane-pill">
+            <i class="fas fa-shipping-fast mr-2"></i> Customer Portal
+        </div>
+        <h1 class="left-pane-title">
+            Ship smarter<br />
+            with SkyNet Online
+        </h1>
+        <p class="left-pane-desc">
+            Join thousands of customers sending packages locally and internationally — fast, affordable, and fully tracked.
+        </p>
+
+        <div class="left-pane-features">
+            <div class="feature-item">
+                <div class="feature-icon-wrapper">
+                    <i class="fas fa-map-marker-alt"></i>
+                </div>
+                <div>
+                    <div class="feature-text-title">Real-time tracking</div>
+                    <div class="feature-text-desc">Know exactly where your package is at every step of the journey.</div>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <div class="feature-icon-wrapper">
+                    <i class="fas fa-globe"></i>
+                </div>
+                <div>
+                    <div class="feature-text-title">Local & international delivery</div>
+                    <div class="feature-text-desc">Ship to destinations across South Africa and globally with ease.</div>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <div class="feature-icon-wrapper">
+                    <i class="fas fa-wallet"></i>
+                </div>
+                <div>
+                    <div class="feature-text-title">Prepaid & flexible payments</div>
+                    <div class="feature-text-desc">No accounts or paperwork — pay online and start shipping immediately.</div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- SkyNet User Login (Azure Active Directory) -->
-    <div class="mb-4">
-        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1rem; color: #a5bdf2;">SkyNet Employee Login</h5>
-        <button type="button" class="btn-skypoint-primary" @onclick="LoginWithAad" disabled="@isSubmitting">
-            <i class="fab fa-microsoft mr-2"></i> Login with Microsoft AAD
-        </button>
+    <!-- Right Form Pane -->
+    <div class="split-right-pane">
+        <div class="form-card-wrapper">
+            <div class="form-pill-badge">
+                Customer
+            </div>
+            <h2 class="form-welcome-title">Welcome back</h2>
+            <p class="form-welcome-subtitle">Sign in to your SkyNet Online customer account to manage shipments and track parcels.</p>
+
+            <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
+                <DataAnnotationsValidator />
+
+                <div class="form-group-light">
+                    <label class="form-label-light" for="username">Email Address</label>
+                    <div class="input-container-light">
+                        <i class="fas fa-envelope input-icon-left"></i>
+                        <InputText id="username" class="form-input-light" placeholder="Email" @bind-Value="loginModel.Username" required />
+                    </div>
+                    <ValidationMessage For="@(() => loginModel.Username)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
+                </div>
+
+                <div class="form-group-light">
+                    <label class="form-label-light" for="password">Password</label>
+                    <div class="input-container-light">
+                        <i class="fas fa-lock input-icon-left"></i>
+                        <input type="@PasswordType" id="password" class="form-input-light" placeholder="Password" @bind="loginModel.Password" required />
+                        <i class="@PasswordToggleIcon password-toggle-light" @onclick="TogglePasswordVisibility"></i>
+                    </div>
+                    <ValidationMessage For="@(() => loginModel.Password)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
+                </div>
+
+                <a href="#" class="form-link-highlight" style="font-size: 0.85rem; display: block; text-align: right; margin-top: -0.5rem; margin-bottom: 2rem;">Forgot your password?</a>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="msg error" style="display: block; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #ef4444; padding: 10px 15px; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.9rem;">@errorMessage</div>
+                }
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="msg success" style="display: block; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10b981; padding: 10px 15px; border-radius: 6px; margin-bottom: 1.5rem; font-size: 0.9rem;">@successMessage</div>
+                }
+
+                <button type="submit" class="btn-skynet-red" disabled="@isSubmitting">
+                    <i class="fas fa-sign-in-alt mr-2"></i> @(isSubmitting ? "Connecting to SkyPoint..." : "Login")
+                </button>
+
+                <div style="text-align: center; margin: 1.5rem 0; color: #94a3b8; font-size: 0.85rem; font-weight: 700; position: relative;">
+                    OR
+                </div>
+
+                <button type="button" class="btn-skynet-green" @onclick="LoginWithAad">
+                    <i class="fab fa-microsoft mr-2"></i> Continue as a Guest
+                </button>
+
+                <a href="@GetRegisterLink()" class="btn-skynet-outline-red">
+                    <i class="fas fa-user-plus mr-2"></i> Create an Account
+                </a>
+
+                <div style="text-align: center; margin-top: 2rem; font-size: 0.9rem; color: #64748b;">
+                    Don't have an account? <a href="@GetRegisterLink()" class="form-link-highlight">Register here &rarr;</a>
+                </div>
+            </EditForm>
+        </div>
     </div>
-
-    <div class="divider-skypoint"></div>
-
-    <!-- SkyNet Client Login (Email/Password) -->
-    <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
-        <DataAnnotationsValidator />
-        
-        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1.5rem; color: #a5bdf2;">SkyPoint Client Credentials</h5>
- 
-        <div class="form-group-custom">
-            <label class="form-label-custom" for="username" style="color: #cbd5e1;">Email Address / Username</label>
-            <div class="input-container">
-                <InputText id="username" class="form-input-skypoint" placeholder="name@example.com" @bind-Value="loginModel.Username" required />
-            </div>
-            <ValidationMessage For="@(() => loginModel.Username)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-        </div>
- 
-        <div class="form-group-custom">
-            <label class="form-label-custom" for="password" style="color: #cbd5e1;">Password</label>
-            <div class="input-container">
-                <input type="@PasswordType" id="password" class="form-input-skypoint" placeholder="password" @bind="loginModel.Password" required />
-                <i class="@PasswordToggleIcon password-toggle-skypoint" @onclick="TogglePasswordVisibility"></i>
-            </div>
-            <ValidationMessage For="@(() => loginModel.Password)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
-        </div>
-
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <div class="msg error" style="display: block; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171;">@errorMessage</div>
-        }
-        @if (!string.IsNullOrEmpty(successMessage))
-        {
-            <div class="msg success" style="display: block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399;">@successMessage</div>
-        }
-        @if (!string.IsNullOrEmpty(infoMessage))
-        {
-            <div class="msg info" style="display: block; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa;">@infoMessage</div>
-        }
-
-        <div class="mt-4">
-            <button type="submit" class="btn-skypoint-primary" disabled="@isSubmitting">
-                @(isSubmitting ? "Connecting to SkyPoint..." : "Connect Account")
-            </button>
-            <a role="button" class="btn-skynet-secondary text-center d-block mt-2" href="@GetCancelUrl()" style="border-color: rgba(0, 162, 232, 0.25); background: rgba(0, 162, 232, 0.05);">Cancel</a>
-        </div>
-
-        <div class="text-center">
-            <a href="#" class="skypoint-link">Forgot your password?</a>
-        </div>
-    </EditForm>
 </div>
 
 @code {
@@ -111,6 +161,11 @@
     private string GetCancelUrl()
     {
         return string.IsNullOrEmpty(Shop) ? "/" : $"?shop={Uri.EscapeDataString(Shop)}";
+    }
+
+    private string GetRegisterLink()
+    {
+        return string.IsNullOrEmpty(Shop) ? "/register" : $"/register?shop={Uri.EscapeDataString(Shop)}";
     }
 
     private void LoginWithAad()
