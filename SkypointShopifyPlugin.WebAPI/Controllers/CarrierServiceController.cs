@@ -194,7 +194,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                         .Where(rate => rate.Price > 0)
                         .Select(rate => new ShippingRate
                         {
-                            ServiceName = $"Skypoint {rate.ServiceName}",
+                            ServiceName = rate.ServiceName,
                             ServiceCode = rate.ServiceName,
                             TotalPrice = (int)Math.Round(rate.Price * 100),
                             Description = rate.ServiceDescription,

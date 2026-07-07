@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "43cc9e72087b61c72649cbabcd052072"
-name = "Skypoint Shipping"
+name = "SkyNet Online Shipping"
 application_url = "https://27d0-223-185-24-22.ngrok-free.app"
 embedded = false
 handle = "skypoint-shipping"

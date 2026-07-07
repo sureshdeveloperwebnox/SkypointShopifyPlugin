@@ -369,7 +369,7 @@
                                                         <h5 style="color: #0f172a; font-weight: 800; font-size: 0.95rem; margin-top: 0; margin-bottom: 1rem;"><i class="fas fa-box" style="color: #64748b; margin-right: 5px;"></i> Package Specifications</h5>
                                                         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; color: #475569;">
                                                             <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 8px 0; color: #64748b;">Total Price:</td><td style="padding: 8px 0; font-weight: bold; text-align: right; color: #0f172a;">@order.TotalPrice @order.Currency</td></tr>
-                                                            <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 8px 0; color: #64748b;">Carrier Service:</td><td style="padding: 8px 0; text-align: right; color: #0f172a;">@(order.PudoProvider ?? "SkyPoint")</td></tr>
+                                                            <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 8px 0; color: #64748b;">Carrier Service:</td><td style="padding: 8px 0; text-align: right; color: #0f172a;">@(order.PudoProvider ?? "SkyNet Online")</td></tr>
                                                             <tr style="border-bottom: 1px solid #e2e8f0;"><td style="padding: 8px 0; color: #64748b;">Financial Status:</td><td style="padding: 8px 0; text-align: right; text-transform: uppercase; font-weight: bold; color: #006bb7;">@order.FinancialStatus</td></tr>
                                                             <tr><td style="padding: 8px 0; color: #64748b;">Fulfillment Status:</td><td style="padding: 8px 0; text-align: right; text-transform: uppercase; font-weight: bold; color: #f59e0b;">@order.FulfillmentStatus</td></tr>
                                                         </table>
@@ -859,7 +859,7 @@
             var response = await Http.SendAsync(request);
             if (response.IsSuccessStatusCode)
             {
-                carrierMessage = $"Successfully created Skypoint booking for order #{order.OrderNumber}!";
+                carrierMessage = $"Successfully created SkyNet Online booking for order #{order.OrderNumber}!";
                 await LoadOrders();
                 if (selectedOrder != null && selectedOrder.Id == order.Id)
                 {
