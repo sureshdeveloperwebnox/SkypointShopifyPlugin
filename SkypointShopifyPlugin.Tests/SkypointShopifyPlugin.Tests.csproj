@@ -18,11 +18,13 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Moq" Version="4.20.72" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SkypointShopifyPlugin.Core\SkypointShopifyPlugin.Core.csproj" />
     <ProjectReference Include="..\SkypointShopifyPlugin.WebAPI\SkypointShopifyPlugin.WebAPI.csproj" />
+    <ProjectReference Include="..\SkypointShopifyPlugin.Infrastructure\SkypointShopifyPlugin.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
