@@ -1888,11 +1888,11 @@
           "framework": "net9.0",
           "targetAlias": "net9.0",
           "projectReferences": {
-            "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {
-              "projectPath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj"
+            "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {
+              "projectPath": "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj"
             },
-            "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Core\\SkypointShopifyPlugin.Core.csproj": {
-              "projectPath": "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Core\\SkypointShopifyPlugin.Core.csproj"
+            "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Core\\SkypointShopifyPlugin.Core.csproj": {
+              "projectPath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Core\\SkypointShopifyPlugin.Core.csproj"
             },
             "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Infrastructure\\SkypointShopifyPlugin.Infrastructure.csproj": {
               "projectPath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Infrastructure\\SkypointShopifyPlugin.Infrastructure.csproj"

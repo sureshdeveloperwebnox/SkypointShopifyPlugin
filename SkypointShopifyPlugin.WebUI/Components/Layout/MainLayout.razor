@@ -7,7 +7,7 @@
     <nav class="navbar auth-navbar">
         <div class="navbar-container">
             <a class="navbar-brand" href="/">
-                <img src="images/skynet_logo.jpeg" alt="SkyNet Logo" style="height: 40px; vertical-align: middle; border-radius: 4px;" />
+                <img src="images/skynet_logo.jpeg" alt="SkyNet Logo" style="height: 60px; vertical-align: middle; border-radius: 4px; object-fit: contain;" />
             </a>
             <div class="navbar-links">
                 @if (isLoaded)
@@ -16,7 +16,7 @@
                     {
                         <a href="@GetLink("/setup")" class="nav-link-btn @(IsActive("/setup") ? "active" : "")">Configuration</a>
                         <a href="@GetLink("/dashboard")" class="nav-link-btn @(IsActive("/dashboard") ? "active" : "")">Dashboard</a>
-                        <button @onclick="Logout" class="nav-link-btn" style="border: 1px solid rgba(255,255,255,0.15); background: transparent; color: #333;">Logout</button>
+                        <button @onclick="Logout" class="nav-link-btn" style="border: none; background: transparent; cursor: pointer;">Logout</button>
                     }
                     else
                     {
