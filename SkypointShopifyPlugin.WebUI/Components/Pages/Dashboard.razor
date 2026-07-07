@@ -13,6 +13,19 @@
     }
     else
     {
+        @if (!string.IsNullOrEmpty(carrierMessage))
+        {
+            var isSuccess = carrierMessage.Contains("success", StringComparison.OrdinalIgnoreCase);
+            var bgColor = isSuccess ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)";
+            var borderColor = isSuccess ? "rgba(16, 185, 129, 0.2)" : "rgba(239, 68, 68, 0.2)";
+            var textColor = isSuccess ? "#10b981" : "#ef4444";
+            
+            <div class="msg" style="display: block; background: @bgColor; border: 1px solid @borderColor; color: @textColor; padding: 12px 18px; border-radius: 6px; margin-bottom: 2rem; position: relative;">
+                <strong>@(isSuccess ? "✓ Status: " : "✗ Alert: ")</strong> @carrierMessage
+                <button type="button" @onclick="() => carrierMessage = null" style="position: absolute; right: 15px; top: 12px; background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: @textColor; line-height: 1;">&times;</button>
+            </div>
+        }
+
         <!-- Top Row: Title & User Info -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
             <h1 style="font-size: 1.8rem; font-weight: 800; color: #0f172a; margin: 0;">Dashboard</h1>
@@ -505,11 +518,22 @@
             {
                 await JSRuntime.InvokeVoidAsync("eval", @"
                     window.downloadBase64File = function(base64String, fileName, mimeType) {
-                        const linkSource = 'data:' + mimeType + ';base64,' + base64String;
+                        const byteCharacters = atob(base64String.trim().replace(/\s/g, ''));
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], {type: mimeType});
+                        const blobUrl = URL.createObjectURL(blob);
+                        
                         const downloadLink = document.createElement('a');
-                        downloadLink.href = linkSource;
+                        downloadLink.href = blobUrl;
                         downloadLink.download = fileName;
+                        document.body.appendChild(downloadLink);
                         downloadLink.click();
+                        document.body.removeChild(downloadLink);
+                        URL.revokeObjectURL(blobUrl);
                     };
                 ");
 
