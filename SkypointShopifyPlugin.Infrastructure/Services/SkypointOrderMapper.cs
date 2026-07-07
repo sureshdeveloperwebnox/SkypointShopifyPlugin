@@ -244,6 +244,14 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         {
             order.SkypointBookingId = bookingResponse.Id;
             order.SkypointTrackNo = bookingResponse.TrackNo;
+            // Extract the actual Skynet waybill barcode number from the first parcel dimension.
+            // This is the number required by the waybill download API (e.g. 080040106215),
+            // distinct from the booking reference TrackNo (e.g. DROP-108768).
+            var waybillNo = bookingResponse.ParcelDimensions
+                ?.FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
+                ?.ParcelTrackNo;
+            if (!string.IsNullOrEmpty(waybillNo))
+                order.SkypointWaybillNo = waybillNo;
             order.SkypointStatus = bookingResponse.Status;
             order.Status = "processing";
             order.UpdatedAt = DateTime.UtcNow;

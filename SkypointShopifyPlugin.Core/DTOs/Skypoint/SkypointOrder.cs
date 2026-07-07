@@ -20,7 +20,8 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         public string Currency { get; set; } = "ZAR";
         public string Status { get; set; } = "pending"; // pending, processing, completed, cancelled
         public string? SkypointBookingId { get; set; }
-        public string? SkypointTrackNo { get; set; }
+        public string? SkypointTrackNo { get; set; }       // Booking reference e.g. DROP-108768
+        public string? SkypointWaybillNo { get; set; }     // Actual Skynet waybill barcode e.g. 080040106215
         public string? SkypointStatus { get; set; }
         public string OrderSource { get; set; } = "skypoint"; // skypoint, shopify, woocommerce
         public string? VendorId { get; set; }

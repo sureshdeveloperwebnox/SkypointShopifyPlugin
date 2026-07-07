@@ -433,6 +433,18 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     return null;
                 }
 
+                // Use the actual Skynet barcode waybill number for the download API.
+                // SkypointWaybillNo (e.g. 080040106215) is extracted from ParcelDimensions.ParcelTrackNo
+                // at booking creation time. SkypointTrackNo is the booking reference (e.g. DROP-108768)
+                // which the download API does NOT accept.
+                var waybillNumberForDownload = !string.IsNullOrEmpty(order.SkypointWaybillNo)
+                    ? order.SkypointWaybillNo
+                    : order.SkypointTrackNo;
+
+                _logger.LogInformation(
+                    "Downloading waybill for order {OrderId}: using waybill number '{WaybillNo}' (booking ref: '{TrackNo}')",
+                    orderId, waybillNumberForDownload, order.SkypointTrackNo);
+
                 var vendorId = order.VendorId ?? "default";
                 var (token, _) = await GetOrRefreshTokenAsync(vendorId);
 
@@ -442,7 +454,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     return null;
                 }
 
-                return await _skypointApiClient.DownloadWaybillAsync(order.SkypointTrackNo, token);
+                return await _skypointApiClient.DownloadWaybillAsync(waybillNumberForDownload, token);
             }
             catch (Exception ex)
             {
