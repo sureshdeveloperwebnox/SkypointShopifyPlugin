@@ -11,7 +11,7 @@ namespace SkypointShopifyPlugin.Tests
 {
     public class WaybillDownloadTests
     {
-        // Helper: creates a SkypointOrderService with mocked dependencies
+        // Helper: creates SkypointOrderService with mocked dependencies
         private static SkypointOrderService BuildService(
             ISkypointApiClient apiClient,
             ISkypointOrderStore orderStore,
@@ -25,6 +25,13 @@ namespace SkypointShopifyPlugin.Tests
                 new Mock<IEcommercePlatformService>().Object,
                 null!
             );
+        }
+
+        // Helper: safe base64 decode
+        private static bool TryDecodeBase64(string base64, out byte[]? bytes)
+        {
+            try { bytes = Convert.FromBase64String(base64); return true; }
+            catch { bytes = null; return false; }
         }
 
         // ----------------------------------------------------------------
@@ -62,7 +69,6 @@ namespace SkypointShopifyPlugin.Tests
             };
 
             var isValidBase64 = TryDecodeBase64(response.FileStream!, out var decodedBytes);
-
             Assert.True(isValidBase64, "FileStream must be valid base64");
             Assert.NotNull(decodedBytes);
             Assert.True(decodedBytes.Length > 0, "Decoded bytes must be non-empty");
@@ -125,7 +131,7 @@ namespace SkypointShopifyPlugin.Tests
                 ApplicationType = "application/pdf"
             };
 
-            var order = new SkypointShopifyPlugin.Core.Models.SkypointOrder
+            var order = new SkypointOrder
             {
                 Id = orderId,
                 VendorId = vendorId,
@@ -152,7 +158,7 @@ namespace SkypointShopifyPlugin.Tests
 
             var result = await service.DownloadWaybillAsync(orderId);
 
-            // Assert: result is not null
+            // Assert: result is not null and has expected fields
             Assert.NotNull(result);
             Assert.Equal(waybillNumber + ".pdf", result.FileName);
             Assert.Equal("application/pdf", result.ApplicationType);
@@ -164,7 +170,7 @@ namespace SkypointShopifyPlugin.Tests
             var header = Encoding.ASCII.GetString(decoded!, 0, Math.Min(4, decoded!.Length));
             Assert.Equal("%PDF", header);
 
-            // Assert: API client was called exactly once with the right waybill
+            // Assert: API client was called exactly once with the correct waybill number
             mockApiClient.Verify(c => c.DownloadWaybillAsync(waybillNumber, authToken), Times.Once);
         }
 
@@ -179,7 +185,7 @@ namespace SkypointShopifyPlugin.Tests
             var mockTokenStore = new Mock<ISkypointTokenStore>();
 
             mockOrderStore.Setup(s => s.GetOrderByIdAsync("missing-order"))
-                .ReturnsAsync((SkypointShopifyPlugin.Core.Models.SkypointOrder?)null);
+                .ReturnsAsync((SkypointOrder?)null);
 
             var service = BuildService(mockApiClient.Object, mockOrderStore.Object, mockTokenStore.Object);
 
@@ -200,14 +206,15 @@ namespace SkypointShopifyPlugin.Tests
             var mockOrderStore = new Mock<ISkypointOrderStore>();
             var mockTokenStore = new Mock<ISkypointTokenStore>();
 
-            var orderWithNoTrackNo = new SkypointShopifyPlugin.Core.Models.SkypointOrder
+            var orderWithNoTrackNo = new SkypointOrder
             {
                 Id = "order-no-track",
                 VendorId = "vendor",
                 SkypointTrackNo = string.Empty
             };
 
-            mockOrderStore.Setup(s => s.GetOrderByIdAsync("order-no-track")).ReturnsAsync(orderWithNoTrackNo);
+            mockOrderStore.Setup(s => s.GetOrderByIdAsync("order-no-track"))
+                .ReturnsAsync(orderWithNoTrackNo);
 
             var service = BuildService(mockApiClient.Object, mockOrderStore.Object, mockTokenStore.Object);
 
@@ -216,15 +223,6 @@ namespace SkypointShopifyPlugin.Tests
             Assert.Null(result);
             // API client must not be called when there is no track number
             mockApiClient.Verify(c => c.DownloadWaybillAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
-        }
-
-        // ----------------------------------------------------------------
-        // Helper: safe base64 decode
-        // ----------------------------------------------------------------
-        private static bool TryDecodeBase64(string base64, out byte[]? bytes)
-        {
-            try { bytes = Convert.FromBase64String(base64); return true; }
-            catch { bytes = null; return false; }
         }
     }
 }
