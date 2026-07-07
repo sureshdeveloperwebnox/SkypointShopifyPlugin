@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System;
 using PdfSharp.Pdf;
 using PdfSharp.Drawing;
+using PdfSharp.Fonts;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
@@ -547,6 +548,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         private WaybillDownloadResponse GenerateWaybillPdfLocally(SkypointOrder order)
         {
+            EnsureFontResolver();
             var document = new PdfDocument();
             var page = document.AddPage();
             page.Width = XUnit.FromMillimeter(100);
@@ -749,6 +751,85 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
 
             return (null, null);
+        }
+
+        private static bool _fontResolverRegistered = false;
+        private static readonly object _fontResolverLock = new();
+
+        private static void EnsureFontResolver()
+        {
+            if (!_fontResolverRegistered)
+            {
+                lock (_fontResolverLock)
+                {
+                    if (!_fontResolverRegistered)
+                    {
+                        try
+                        {
+                            GlobalFontSettings.FontResolver = new SimpleFontResolver();
+                        }
+                        catch (Exception)
+                        {
+                            // Already registered
+                        }
+                        _fontResolverRegistered = true;
+                    }
+                }
+            }
+        }
+    }
+
+    public class SimpleFontResolver : IFontResolver
+    {
+        public FontResolverInfo? ResolveTypeface(string familyName, bool isBold, bool isItalic)
+        {
+            string fontFileName = "arial.ttf";
+            if (isBold && isItalic) fontFileName = "arialbi.ttf";
+            else if (isBold) fontFileName = "arialbd.ttf";
+            else if (isItalic) fontFileName = "ariali.ttf";
+
+            return new FontResolverInfo(fontFileName);
+        }
+
+        public byte[]? GetFont(string faceName)
+        {
+            // Windows standard fonts path
+            var windowsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts", faceName);
+            if (File.Exists(windowsPath))
+                return File.ReadAllBytes(windowsPath);
+
+            // Linux standard search paths
+            var searchPaths = new[]
+            {
+                "/usr/share/fonts/truetype/msttcorefonts",
+                "/usr/share/fonts/truetype/dejavu",
+                "/usr/share/fonts/dejavu",
+                "/usr/share/fonts"
+            };
+
+            foreach (var dir in searchPaths)
+            {
+                if (Directory.Exists(dir))
+                {
+                    var file = Path.Combine(dir, faceName);
+                    if (File.Exists(file))
+                        return File.ReadAllBytes(file);
+
+                    // Case-insensitive search on Linux
+                    try
+                    {
+                        var files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
+                        foreach (var f in files)
+                        {
+                            if (Path.GetFileName(f).Equals(faceName, StringComparison.OrdinalIgnoreCase))
+                                return File.ReadAllBytes(f);
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            return null;
         }
     }
 }
