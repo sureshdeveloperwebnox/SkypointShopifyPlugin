@@ -34,50 +34,6 @@ namespace SkypointShopifyPlugin.Tests
             catch { bytes = null; return false; }
         }
 
-        [Fact]
-        public async Task DebugPrintLiveTrackingDetails()
-        {
-            var configJson = File.ReadAllText("d:/Office/skynet/SkypointShopifyPlugin/SkypointShopifyPlugin.WebAPI/data/app_config.json");
-            var config = JsonSerializer.Deserialize<JsonElement>(configJson);
-            var baseUrl = config.GetProperty("skypointApi").GetProperty("baseUrl").GetString();
-
-            var credsJson = File.ReadAllText("d:/Office/skynet/SkypointShopifyPlugin/SkypointShopifyPlugin.WebAPI/data/skypoint_credentials.json");
-            var creds = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(credsJson);
-            var userCreds = creds["deeprintztestapp.myshopify.com"];
-            var username = userCreds.GetProperty("Username").GetString();
-            var encryptedPwd = userCreds.GetProperty("EncryptedPassword").GetString();
-            var iv = userCreds.GetProperty("IV").GetString();
-
-            // Decrypt password
-            var keyBytes = File.ReadAllBytes("d:/Office/skynet/SkypointShopifyPlugin/SkypointShopifyPlugin.WebAPI/data/skypoint_key.bin");
-            var combined = Convert.FromBase64String(encryptedPwd);
-            var ivBytes = Convert.FromBase64String(iv);
-            var ciphertext = combined[..^16];
-            var tag = combined[^16..];
-            var plaintextBytes = new byte[ciphertext.Length];
-            using var aes = new System.Security.Cryptography.AesGcm(keyBytes, 16);
-            aes.Decrypt(ivBytes, ciphertext, tag, plaintextBytes);
-            var password = Encoding.UTF8.GetString(plaintextBytes);
-
-            var httpClient = new HttpClient();
-            var settings = new SkypointShopifyPlugin.Core.Configuration.SkypointApiSettings
-            {
-                BaseUrl = baseUrl!,
-                LoginEndpoint = "/api/service/session/customer/login"
-            };
-            var options = Microsoft.Extensions.Options.Options.Create(settings);
-            var logger = NullLogger<SkypointApiClient>.Instance;
-            var apiClient = new SkypointApiClient(httpClient, options, logger);
-
-            var loginResponse = await apiClient.LoginAsync(new LoginRequest { Username = username!, Pwd = password });
-            var token = loginResponse.Token.TokenValue;
-
-            var response1 = await httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/service/booking/download/waybill/080040106214") { Headers = { { "Authorization", $"Bearer {token}" } } });
-            var response2 = await httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/service/booking/download/waybill/080040106216") { Headers = { { "Authorization", $"Bearer {token}" } } });
-
-            Assert.Fail($"Status 214: {response1.StatusCode}, Status 216: {response2.StatusCode}");
-        }
-
         // ----------------------------------------------------------------
         // 1. DTO deserialization - mirrors the actual SkyPoint API response
         // ----------------------------------------------------------------
