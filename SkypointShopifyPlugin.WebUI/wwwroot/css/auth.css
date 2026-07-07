@@ -254,3 +254,125 @@ html, body {
 .auth-card {
     animation: fadeIn 0.5s ease forwards;
 }
+
+/* SkyPoint Online Theme overrides */
+:root {
+    --skypoint-primary: #006bb7;
+    --skypoint-primary-hover: #005a9c;
+    --skypoint-accent: #00a2e8;
+    --skypoint-accent-glow: rgba(0, 162, 232, 0.25);
+    --skypoint-card-bg: rgba(10, 28, 58, 0.85);
+    --skypoint-border: rgba(0, 162, 232, 0.15);
+}
+
+.skypoint-card {
+    background: var(--skypoint-card-bg) !important;
+    border: 1px solid var(--skypoint-border) !important;
+    box-shadow: 0 20px 45px rgba(0, 107, 183, 0.15) !important;
+}
+
+.skypoint-title {
+    color: #ffffff !important;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.skypoint-subtitle {
+    color: #a5bdf2 !important;
+}
+
+.btn-skypoint-primary {
+    width: 100%;
+    background: linear-gradient(135deg, var(--skypoint-primary) 0%, #004d85 100%);
+    border: none;
+    border-radius: 8px;
+    padding: 0.8rem 1.5rem;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 107, 183, 0.3);
+}
+
+.btn-skypoint-primary:hover {
+    background: linear-gradient(135deg, var(--skypoint-primary-hover) 0%, #003a64 100%);
+    box-shadow: 0 6px 20px rgba(0, 107, 183, 0.45);
+    transform: translateY(-1px);
+}
+
+.btn-skypoint-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.form-input-skypoint {
+    width: 100%;
+    background: rgba(15, 32, 66, 0.6);
+    border: 1px solid rgba(0, 162, 232, 0.25);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: #ffffff;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+}
+
+.form-input-skypoint:focus {
+    outline: none;
+    border-color: var(--skypoint-accent);
+    background: rgba(15, 32, 66, 0.9);
+    box-shadow: 0 0 0 3px var(--skypoint-accent-glow);
+}
+
+.password-toggle-skypoint {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #8fa0c4;
+    font-size: 1.1rem;
+    transition: color 0.3s;
+}
+
+.password-toggle-skypoint:hover {
+    color: var(--skypoint-accent);
+}
+
+.divider-skypoint {
+    border-top: 1px solid rgba(0, 162, 232, 0.15);
+    margin: 2rem 0;
+    position: relative;
+    text-align: center;
+}
+
+.divider-skypoint::before {
+    content: 'OR';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #0a1c3a;
+    padding: 0 1rem;
+    color: #8fa0c4;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.skypoint-link {
+    color: var(--skypoint-accent);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    transition: color 0.3s;
+}
+
+.skypoint-link:hover {
+    color: #33bbf2;
+    text-decoration: underline;
+}

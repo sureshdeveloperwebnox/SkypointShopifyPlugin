@@ -190,6 +190,34 @@ static void LoadAppConfig(IConfiguration configuration)
                 configuration["SkypointMappings:DefaultParcelMass"] = parcelMass.ToString();
             if (skypointMappings.TryGetProperty("defaultParcelType", out var parcelType) && parcelType.ValueKind != JsonValueKind.Null)
                 configuration["SkypointMappings:DefaultParcelType"] = parcelType.GetString();
+
+            // Load custom postal code mappings
+            if (skypointMappings.TryGetProperty("postalCodeMappings", out var postalCodeMappings) && postalCodeMappings.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in postalCodeMappings.EnumerateObject())
+                {
+                    if (property.Value.ValueKind != JsonValueKind.Null)
+                    {
+                        var value = property.Value.ToString();
+                        configuration[$"SkypointMappings:PostalCodeMappings:{property.Name}"] = value;
+                        configuration[$"Skypoint:PostalCodeMappings:{property.Name}"] = value;
+                    }
+                }
+            }
+
+            // Load custom suburb mappings
+            if (skypointMappings.TryGetProperty("suburbMappings", out var suburbMappings) && suburbMappings.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in suburbMappings.EnumerateObject())
+                {
+                    if (property.Value.ValueKind != JsonValueKind.Null)
+                    {
+                        var value = property.Value.ToString();
+                        configuration[$"SkypointMappings:SuburbMappings:{property.Name}"] = value;
+                        configuration[$"Skypoint:SuburbMappings:{property.Name}"] = value;
+                    }
+                }
+            }
         }
 
         Console.WriteLine("Configuration loaded successfully from app_config.json");

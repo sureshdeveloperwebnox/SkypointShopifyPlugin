@@ -4,67 +4,67 @@
 @inject ProtectedSessionStorage SessionStorage
 @inject NavigationManager NavigationManager
 
-<div class="auth-card">
+<div class="auth-card skypoint-card">
     <div class="text-center mb-4">
-        <h4 class="auth-card-title">Welcome to SkyTrack</h4>
-        <p class="auth-card-subtitle">Select your login method below</p>
+        <h4 class="auth-card-title skypoint-title">SkyPoint Online Portal</h4>
+        <p class="auth-card-subtitle skypoint-subtitle">Connect your SkyPoint merchant account</p>
     </div>
 
     <!-- SkyNet User Login (Azure Active Directory) -->
     <div class="mb-4">
-        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1rem;">SkyNet User Login</h5>
-        <button type="button" class="btn-skynet-primary" @onclick="LoginWithAad" disabled="@isSubmitting">
+        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1rem; color: #a5bdf2;">SkyNet Employee Login</h5>
+        <button type="button" class="btn-skypoint-primary" @onclick="LoginWithAad" disabled="@isSubmitting">
             <i class="fab fa-microsoft mr-2"></i> Login with Microsoft AAD
         </button>
     </div>
 
-    <div class="auth-divider"></div>
+    <div class="divider-skypoint"></div>
 
     <!-- SkyNet Client Login (Email/Password) -->
     <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
         <DataAnnotationsValidator />
         
-        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1.5rem;">SkyNet Client Login</h5>
-
+        <h5 class="form-label-custom" style="font-size: 0.9rem; text-align: center; margin-bottom: 1.5rem; color: #a5bdf2;">SkyPoint Client Credentials</h5>
+ 
         <div class="form-group-custom">
-            <label class="form-label-custom" for="username">Email Address</label>
+            <label class="form-label-custom" for="username" style="color: #cbd5e1;">Email Address / Username</label>
             <div class="input-container">
-                <InputText id="username" class="form-input-custom" placeholder="name@example.com" @bind-Value="loginModel.Username" required />
+                <InputText id="username" class="form-input-skypoint" placeholder="name@example.com" @bind-Value="loginModel.Username" required />
             </div>
             <ValidationMessage For="@(() => loginModel.Username)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
         </div>
-
+ 
         <div class="form-group-custom">
-            <label class="form-label-custom" for="password">Password</label>
+            <label class="form-label-custom" for="password" style="color: #cbd5e1;">Password</label>
             <div class="input-container">
-                <input type="@PasswordType" id="password" class="form-input-custom" placeholder="password" @bind="loginModel.Password" required />
-                <i class="@PasswordToggleIcon password-toggle-icon" @onclick="TogglePasswordVisibility"></i>
+                <input type="@PasswordType" id="password" class="form-input-skypoint" placeholder="password" @bind="loginModel.Password" required />
+                <i class="@PasswordToggleIcon password-toggle-skypoint" @onclick="TogglePasswordVisibility"></i>
             </div>
             <ValidationMessage For="@(() => loginModel.Password)" style="color: #f87171; font-size: 0.8rem; margin-top: 5px;" />
         </div>
 
         @if (!string.IsNullOrEmpty(errorMessage))
         {
-            <div class="msg error" style="display: block;">@errorMessage</div>
+            <div class="msg error" style="display: block; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171;">@errorMessage</div>
         }
         @if (!string.IsNullOrEmpty(successMessage))
         {
-            <div class="msg success" style="display: block;">@successMessage</div>
+            <div class="msg success" style="display: block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399;">@successMessage</div>
         }
         @if (!string.IsNullOrEmpty(infoMessage))
         {
-            <div class="msg info" style="display: block; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); color: #60a5fa;">@infoMessage</div>
+            <div class="msg info" style="display: block; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa;">@infoMessage</div>
         }
 
         <div class="mt-4">
-            <button type="submit" class="btn-skynet-primary" disabled="@isSubmitting">
-                @(isSubmitting ? "Logging in..." : "Login")
+            <button type="submit" class="btn-skypoint-primary" disabled="@isSubmitting">
+                @(isSubmitting ? "Connecting to SkyPoint..." : "Connect Account")
             </button>
-            <a role="button" class="btn-skynet-secondary text-center d-block mt-2" href="@GetCancelUrl()">Cancel</a>
+            <a role="button" class="btn-skynet-secondary text-center d-block mt-2" href="@GetCancelUrl()" style="border-color: rgba(0, 162, 232, 0.25); background: rgba(0, 162, 232, 0.05);">Cancel</a>
         </div>
 
         <div class="text-center">
-            <a href="#" class="forgot-password-link">Forgot your password?</a>
+            <a href="#" class="skypoint-link">Forgot your password?</a>
         </div>
     </EditForm>
 </div>

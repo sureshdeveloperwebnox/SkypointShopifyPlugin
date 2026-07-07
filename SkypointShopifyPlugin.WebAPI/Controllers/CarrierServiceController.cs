@@ -136,13 +136,13 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     DropOffPostalCode = typedRequest.Destination.PostalCode,
                     ParcelsDims = typedRequest.Items.Select(item => new ParcelDimension
                     {
-                        ParcelMass = item.Grams > 0 ? item.Grams / 1000.0 : double.Parse(_configuration["Skypoint:DefaultParcelMass"] ?? "0.5"),
-                        ParcelLength = double.Parse(_configuration["Skypoint:DefaultParcelLength"] ?? "10.0"),
-                        ParcelBreadth = double.Parse(_configuration["Skypoint:DefaultParcelBreadth"] ?? "10.0"),
-                        ParcelHeight = double.Parse(_configuration["Skypoint:DefaultParcelHeight"] ?? "10.0"),
-                        PredefinedParcel = _configuration["Skypoint:DefaultParcelType"] ?? "A4_Text_Book",
+                        ParcelMass = item.Grams > 0 ? item.Grams / 1000.0 : double.Parse(_configuration["SkypointMappings:DefaultParcelMass"] ?? "0.5"),
+                        ParcelLength = double.Parse(_configuration["SkypointMappings:DefaultParcelLength"] ?? "10.0"),
+                        ParcelBreadth = double.Parse(_configuration["SkypointMappings:DefaultParcelBreadth"] ?? "10.0"),
+                        ParcelHeight = double.Parse(_configuration["SkypointMappings:DefaultParcelHeight"] ?? "10.0"),
+                        PredefinedParcel = _configuration["SkypointMappings:DefaultParcelType"] ?? "A4_Text_Book",
                         ParcelReference = !string.IsNullOrEmpty(item.Sku) ? item.Sku : item.Name,
-                        SelectedParcel = _configuration["Skypoint:DefaultParcelType"] ?? "A4_Text_Book"
+                        SelectedParcel = _configuration["SkypointMappings:DefaultParcelType"] ?? "A4_Text_Book"
                     }).ToList()
                 };
 
@@ -151,12 +151,12 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 {
                     rateRequest.ParcelsDims.Add(new ParcelDimension
                     {
-                        ParcelMass = double.Parse(_configuration["Skypoint:DefaultParcelMass"] ?? "0.5"),
-                        ParcelLength = double.Parse(_configuration["Skypoint:DefaultParcelLength"] ?? "10.0"),
-                        ParcelBreadth = double.Parse(_configuration["Skypoint:DefaultParcelBreadth"] ?? "10.0"),
-                        ParcelHeight = double.Parse(_configuration["Skypoint:DefaultParcelHeight"] ?? "10.0"),
-                        PredefinedParcel = _configuration["Skypoint:DefaultParcelType"] ?? "A4_Text_Book",
-                        SelectedParcel = _configuration["Skypoint:DefaultParcelType"] ?? "A4_Text_Book",
+                        ParcelMass = double.Parse(_configuration["SkypointMappings:DefaultParcelMass"] ?? "0.5"),
+                        ParcelLength = double.Parse(_configuration["SkypointMappings:DefaultParcelLength"] ?? "10.0"),
+                        ParcelBreadth = double.Parse(_configuration["SkypointMappings:DefaultParcelBreadth"] ?? "10.0"),
+                        ParcelHeight = double.Parse(_configuration["SkypointMappings:DefaultParcelHeight"] ?? "10.0"),
+                        PredefinedParcel = _configuration["SkypointMappings:DefaultParcelType"] ?? "A4_Text_Book",
+                        SelectedParcel = _configuration["SkypointMappings:DefaultParcelType"] ?? "A4_Text_Book",
                         ParcelReference = "DEFAULT"
                     });
                 }

@@ -95,13 +95,13 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 PickUpTime = pickupDate.ToString("HH:mm"),
                 ParcelDimensions = lineItems.Select(item => new ParcelDimension
                 {
-                    ParcelMass = 5.0,
-                    ParcelLength = 30.0,
-                    ParcelBreadth = 30.0,
-                    ParcelHeight = 23.0,
-                    PredefinedParcel = parcelType,
+                    ParcelMass = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelMass"], out var m)) ? m : 5.0,
+                    ParcelLength = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelLength"], out var l)) ? l : 30.0,
+                    ParcelBreadth = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelBreadth"], out var b)) ? b : 30.0,
+                    ParcelHeight = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelHeight"], out var h)) ? h : 23.0,
+                    PredefinedParcel = (configuration != null && !string.IsNullOrEmpty(configuration["SkypointMappings:DefaultParcelType"])) ? configuration["SkypointMappings:DefaultParcelType"]! : parcelType,
                     ParcelReference = FirstNonEmpty(item.Sku, item.Title, order.OrderNumber),
-                    SelectedParcel = parcelType
+                    SelectedParcel = (configuration != null && !string.IsNullOrEmpty(configuration["SkypointMappings:DefaultParcelType"])) ? configuration["SkypointMappings:DefaultParcelType"]! : parcelType
                 }).ToList(),
                 PickUpCity = FirstNonEmpty(billingAddress?.City, " "),
                 DropOffCity = FirstNonEmpty(shippingAddress?.City, " "),
@@ -217,13 +217,13 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 PickUpTime = pickupDate.ToString("HH:mm"),
                 ParcelDimensions = lineItems.Select(item => new ParcelDimension
                 {
-                    ParcelMass = 5.0,
-                    ParcelLength = 30.0,
-                    ParcelBreadth = 30.0,
-                    ParcelHeight = 23.0,
-                    PredefinedParcel = parcelType,
+                    ParcelMass = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelMass"], out var m)) ? m : 5.0,
+                    ParcelLength = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelLength"], out var l)) ? l : 30.0,
+                    ParcelBreadth = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelBreadth"], out var b)) ? b : 30.0,
+                    ParcelHeight = (configuration != null && double.TryParse(configuration["SkypointMappings:DefaultParcelHeight"], out var h)) ? h : 23.0,
+                    PredefinedParcel = (configuration != null && !string.IsNullOrEmpty(configuration["SkypointMappings:DefaultParcelType"])) ? configuration["SkypointMappings:DefaultParcelType"]! : parcelType,
                     ParcelReference = FirstNonEmpty(item.sku, item.title, shopifyOrder.order_number.ToString()),
-                    SelectedParcel = parcelType
+                    SelectedParcel = (configuration != null && !string.IsNullOrEmpty(configuration["SkypointMappings:DefaultParcelType"])) ? configuration["SkypointMappings:DefaultParcelType"]! : parcelType
                 }).ToList(),
                 PickUpCity = isDtc ? " " : FirstNonEmpty(billingAddress?.city, " "),
                 DropOffCity = isDtc ? " " : FirstNonEmpty(shippingAddress?.city, " "),
