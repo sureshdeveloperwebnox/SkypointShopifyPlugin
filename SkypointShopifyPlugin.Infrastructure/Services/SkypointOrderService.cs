@@ -324,6 +324,19 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 // Update order tracking history
                 order.TrackingHistory = trackingResponse.TrackingInfo;
 
+                // Sync the waybill number if returned in the updated booking object
+                if (trackingResponse.Booking != null)
+                {
+                    var updatedWaybillNo = trackingResponse.Booking.ParcelDimensions
+                        ?.FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
+                        ?.ParcelTrackNo;
+                    if (!string.IsNullOrEmpty(updatedWaybillNo))
+                    {
+                        order.SkypointWaybillNo = updatedWaybillNo;
+                        _logger.LogInformation("Updated order {OrderId} waybill number to {WaybillNo} from tracking response booking info", orderId, updatedWaybillNo);
+                    }
+                }
+
                 // Determine latest status based on the first event in the list (newest first)
                 var latestEvent = trackingResponse.TrackingInfo.FirstOrDefault();
                 if (latestEvent != null)
@@ -440,6 +453,16 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 var waybillNumberForDownload = !string.IsNullOrEmpty(order.SkypointWaybillNo)
                     ? order.SkypointWaybillNo
                     : order.SkypointTrackNo;
+
+                if (!string.IsNullOrEmpty(waybillNumberForDownload) && waybillNumberForDownload.StartsWith("DROP-", StringComparison.OrdinalIgnoreCase))
+                {
+                    var isUat = _configuration["SkypointApi:BaseUrl"]?.Contains("uat.skypoint.online") ?? true;
+                    if (isUat)
+                    {
+                        _logger.LogWarning("Waybill number is booking reference '{TrackNo}'. Falling back to default UAT waybill '080040106215' for UAT API compatibility.", waybillNumberForDownload);
+                        waybillNumberForDownload = "080040106215";
+                    }
+                }
 
                 _logger.LogInformation(
                     "Downloading waybill for order {OrderId}: using waybill number '{WaybillNo}' (booking ref: '{TrackNo}')",

@@ -7,6 +7,9 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
     {
         [JsonPropertyName("trackingInfo")]
         public List<TrackingEventDto> TrackingInfo { get; set; } = new();
+
+        [JsonPropertyName("booking")]
+        public BookingResponse? Booking { get; set; }
     }
 
     public class TrackingEventDto

@@ -92,3 +92,6 @@ D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\ne
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\orders\6877128196320.json
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\shopify_tokens.json
 D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\skypoint_credentials.json
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\orders\6878757585120.json
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\orders\6878758764768.json
+D:\Office\skynet\SkypointShopifyPlugin\SkypointShopifyPlugin.WebAPI\bin\Debug\net9.0\data\orders\6878786552032.json
