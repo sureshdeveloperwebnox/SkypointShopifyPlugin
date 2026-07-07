@@ -6,9 +6,6 @@ using System.IO;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System;
-using PdfSharp.Pdf;
-using PdfSharp.Drawing;
-using PdfSharp.Fonts;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
@@ -442,249 +439,31 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
         }
 
-        private static readonly Dictionary<char, string> Code39Patterns = new()
-        {
-            {'0', "n n n w w n w n n"},
-            {'1', "w n n w n n n n w"},
-            {'2', "n n w w n n n n w"},
-            {'3', "w n w w n n n n n"},
-            {'4', "n n n w w n n n w"},
-            {'5', "w n n w w n n n n"},
-            {'6', "n n w w w n n n n"},
-            {'7', "n n n w n n w n w"},
-            {'8', "w n n w n n w n n"},
-            {'9', "n n w w n n w n n"},
-            {'A', "w n n n n w n n w"},
-            {'B', "n n w n n w n n w"},
-            {'C', "w n w n n w n n n"},
-            {'D', "n n n n w w n n w"},
-            {'E', "w n n n w w n n n"},
-            {'F', "n n w n w w n n n"},
-            {'G', "n n n n n w w n w"},
-            {'H', "w n n n n w w n n"},
-            {'I', "n n w n n w w n n"},
-            {'J', "n n n n w w w n n"},
-            {'K', "w n n n n n n w w"},
-            {'L', "n n w n n n n w w"},
-            {'M', "w n w n n n n w n"},
-            {'N', "n n n n w n n w w"},
-            {'O', "w n n n w n n w n"},
-            {'P', "n n w n w n n w n"},
-            {'Q', "n n n n n n w w w"},
-            {'R', "w n n n n n w w n"},
-            {'S', "n n w n n n w w n"},
-            {'T', "n n n n w n w w n"},
-            {'U', "w w n n n n n n w"},
-            {'V', "n w w n n n n n w"},
-            {'W', "w w w n n n n n n"},
-            {'X', "n w n n w n n n w"},
-            {'Y', "w w n n w n n n n"},
-            {'Z', "n w w n w n n n n"},
-            {'-', "n w n n n n w n w"},
-            {'.', "w w n n n n w n n"},
-            {' ', "n w w n n n w n n"},
-            {'*', "n w n n w n w n n"},
-            {'$', "n w n w n w n n n"},
-            {'/', "n w n w n n n w n"},
-            {'+', "n w n n n w n w n"},
-            {'%', "n n n w n w n w n"}
-        };
-
-        private static double GetCode39Width(string text, double narrowWidth, double wideWidth, double gapWidth)
-        {
-            double totalWidth = 0;
-            foreach (var ch in text)
-            {
-                if (!Code39Patterns.TryGetValue(ch, out var pattern))
-                    continue;
-
-                var elements = pattern.Split(' ');
-                foreach (var elem in elements)
-                {
-                    totalWidth += (elem == "w") ? wideWidth : narrowWidth;
-                }
-                totalWidth += gapWidth;
-            }
-            return totalWidth - gapWidth;
-        }
-
-        private static void DrawCode39Barcode(XGraphics gfx, double y, double height, string text, double pageWidth)
-        {
-            text = text.ToUpper();
-            if (!text.StartsWith("*")) text = "*" + text;
-            if (!text.EndsWith("*")) text = text + "*";
-
-            double narrowWidth = 0.8;
-            double wideWidth = 2.0;
-            double gapWidth = 0.8;
-
-            double totalWidth = GetCode39Width(text, narrowWidth, wideWidth, gapWidth);
-            double currentX = (pageWidth - totalWidth) / 2;
-
-            XBrush blackBrush = XBrushes.Black;
-
-            foreach (var ch in text)
-            {
-                if (!Code39Patterns.TryGetValue(ch, out var pattern))
-                    continue;
-
-                var elements = pattern.Split(' ');
-                bool isBar = true;
-
-                foreach (var elem in elements)
-                {
-                    double elemWidth = (elem == "w") ? wideWidth : narrowWidth;
-                    if (isBar)
-                    {
-                        gfx.DrawRectangle(blackBrush, currentX, y, elemWidth, height);
-                    }
-                    currentX += elemWidth;
-                    isBar = !isBar;
-                }
-
-                currentX += gapWidth;
-            }
-        }
-
-        private WaybillDownloadResponse GenerateWaybillPdfLocally(SkypointOrder order)
-        {
-            EnsureFontResolver();
-            var document = new PdfDocument();
-            var page = document.AddPage();
-            page.Width = XUnit.FromMillimeter(100);
-            page.Height = XUnit.FromMillimeter(150);
-
-            var gfx = XGraphics.FromPdfPage(page);
-            var margin = 10.0;
-            var borderPen = new XPen(XColors.Black, 1.5);
-            gfx.DrawRectangle(borderPen, margin, margin, page.Width - 2 * margin, page.Height - 2 * margin);
-
-            // Title
-            var titleFont = new XFont("Helvetica-Bold", 12);
-            var subTitleFont = new XFont("Helvetica", 7);
-            gfx.DrawString("SKYNET WORLDWIDE EXPRESS", titleFont, XBrushes.Black, new XRect(margin, margin + 5, page.Width - 2 * margin, 15), XStringFormats.TopCenter);
-            gfx.DrawString("SHOPIFY API PLUGIN DELIVERIES (SANDBOX)", subTitleFont, XBrushes.Black, new XRect(margin, margin + 18, page.Width - 2 * margin, 10), XStringFormats.TopCenter);
-
-            // Divider
-            var dividerPen = new XPen(XColors.Black, 0.5);
-            var y = margin + 30.0;
-            gfx.DrawLine(dividerPen, margin, y, page.Width - margin, y);
-
-            // Service details
-            y += 5;
-            var labelFont = new XFont("Helvetica-Bold", 8);
-            var valueFont = new XFont("Helvetica", 8);
-            var orderNoFont = new XFont("Helvetica-Bold", 10);
-            
-            gfx.DrawString("ORDER NO:", labelFont, XBrushes.Black, margin + 5, y + 10);
-            gfx.DrawString($"#{order.OrderNumber}", orderNoFont, XBrushes.Black, margin + 55, y + 10);
-
-            var serviceType = !string.IsNullOrEmpty(order.ToCounterCode) ? "PUDO / TO COUNTER" : "ROAD / DOOR TO DOOR";
-            gfx.DrawString("SERVICE:", labelFont, XBrushes.Black, margin + 5, y + 22);
-            gfx.DrawString(serviceType, labelFont, XBrushes.Black, margin + 55, y + 22);
-
-            y += 30;
-            gfx.DrawLine(dividerPen, margin, y, page.Width - margin, y);
-
-            // FROM / Sender Info
-            y += 5;
-            gfx.DrawString("FROM (SENDER):", labelFont, XBrushes.Black, margin + 5, y + 8);
-            var senderName = order.BillingAddress != null ? $"{order.BillingAddress.FirstName} {order.BillingAddress.LastName}" : "Shopify Vendor";
-            var senderPhone = order.BillingAddress?.Phone ?? " ";
-            var senderAddress = order.BillingAddress != null 
-                ? $"{order.BillingAddress.Address1}, {order.BillingAddress.City}, {order.BillingAddress.Zip}"
-                : "Default Warehouse Address";
-
-            gfx.DrawString(senderName, valueFont, XBrushes.Black, margin + 5, y + 18);
-            gfx.DrawString(senderAddress, valueFont, XBrushes.Black, margin + 5, y + 28);
-            gfx.DrawString($"TEL: {senderPhone}", valueFont, XBrushes.Black, margin + 5, y + 38);
-
-            y += 45;
-            gfx.DrawLine(dividerPen, margin, y, page.Width - margin, y);
-
-            // TO / Recipient Info
-            y += 5;
-            gfx.DrawString("TO (RECIPIENT):", labelFont, XBrushes.Black, margin + 5, y + 8);
-            var recipientName = order.ShippingAddress != null ? $"{order.ShippingAddress.FirstName} {order.ShippingAddress.LastName}" : $"{order.Customer?.FirstName} {order.Customer?.LastName}";
-            var recipientPhone = order.ShippingAddress?.Phone ?? order.Customer?.Phone ?? " ";
-            var recipientEmail = order.Customer?.Email ?? " ";
-            var recipientAddress = order.ShippingAddress != null 
-                ? $"{order.ShippingAddress.Address1}, {order.ShippingAddress.City}, {order.ShippingAddress.Zip}"
-                : " ";
-
-            gfx.DrawString(recipientName, valueFont, XBrushes.Black, margin + 5, y + 18);
-            gfx.DrawString(recipientAddress, valueFont, XBrushes.Black, margin + 5, y + 28);
-            gfx.DrawString($"TEL: {recipientPhone} | EMAIL: {recipientEmail}", valueFont, XBrushes.Black, margin + 5, y + 38);
-
-            // DTC PUDO Details
-            if (!string.IsNullOrEmpty(order.ToCounterCode))
-            {
-                y += 45;
-                // Draw light gray box for PUDO Counter
-                var pudoBoxBrush = new XSolidBrush(XColor.FromArgb(240, 240, 240));
-                gfx.DrawRectangle(pudoBoxBrush, margin + 3, y, page.Width - 2 * margin - 6, 32);
-                gfx.DrawRectangle(new XPen(XColors.LightGray, 0.5), margin + 3, y, page.Width - 2 * margin - 6, 32);
-
-                gfx.DrawString($"TO COUNTER CODE: {order.ToCounterCode}", labelFont, XBrushes.Black, margin + 8, y + 10);
-                gfx.DrawString($"COUNTER NAME: {order.ToCounterName}", valueFont, XBrushes.Black, margin + 8, y + 22);
-                y += 35;
-            }
-            else
-            {
-                y += 45;
-            }
-
-            gfx.DrawLine(dividerPen, margin, y, page.Width - margin, y);
-
-            // Barcode section
-            y += 10;
-            var barcodeVal = order.SkypointTrackNo ?? $"DROP-{order.OrderNumber}";
-            DrawCode39Barcode(gfx, y, 40, barcodeVal, page.Width);
-            
-            y += 45;
-            var barcodeFont = new XFont("Helvetica-Bold", 10);
-            gfx.DrawString(barcodeVal, barcodeFont, XBrushes.Black, new XRect(margin, y, page.Width - 2 * margin, 15), XStringFormats.TopCenter);
-
-            using var ms = new MemoryStream();
-            document.Save(ms);
-            var bytes = ms.ToArray();
-
-            return new WaybillDownloadResponse
-            {
-                FileName = $"waybill_{order.OrderNumber}.pdf",
-                ApplicationType = "application/pdf",
-                FileStream = Convert.ToBase64String(bytes)
-            };
-        }
 
         public async Task<WaybillDownloadResponse?> DownloadWaybillAsync(string orderId)
         {
             try
             {
                 var order = await _orderStore.GetOrderByIdAsync(orderId);
-                if (order == null || string.IsNullOrEmpty(order.SkypointTrackNo))
+                if (order == null)
                 {
-                    _logger.LogWarning("Cannot download waybill for order {OrderId} - order not found or has no track number", orderId);
+                    _logger.LogWarning("Cannot download waybill for order {OrderId} - order not found", orderId);
                     return null;
                 }
 
-                // If we are in UAT sandbox mode and the order does not have an assigned barcode waybill number yet
-                // (e.g. still DROP-xxxxx because it's unpaid), we dynamically generate a high-quality local label PDF 
-                // containing the actual order info, address, and a scannable Code 39 barcode.
-                var isUat = _configuration["SkypointApi:BaseUrl"]?.Contains("uat.skypoint.online") ?? true;
                 var waybillNumberForDownload = !string.IsNullOrEmpty(order.SkypointWaybillNo)
                     ? order.SkypointWaybillNo
                     : order.SkypointTrackNo;
 
-                if (isUat && (string.IsNullOrEmpty(waybillNumberForDownload) || waybillNumberForDownload.StartsWith("DROP-", StringComparison.OrdinalIgnoreCase)))
+                if (string.IsNullOrEmpty(waybillNumberForDownload))
                 {
-                    _logger.LogInformation("UAT Sandbox Mode: Generating dynamic local shipping label PDF with barcode for order {OrderNumber} (booking ref: {TrackNo})", order.OrderNumber, order.SkypointTrackNo);
-                    return GenerateWaybillPdfLocally(order);
+                    _logger.LogWarning("Cannot download waybill for order {OrderId} - order has no waybill number or track number", orderId);
+                    return null;
                 }
 
                 _logger.LogInformation(
-                    "Downloading waybill for order {OrderId}: using waybill number '{WaybillNo}' (booking ref: '{TrackNo}')",
-                    orderId, waybillNumberForDownload, order.SkypointTrackNo);
+                    "Downloading waybill for order {OrderId}: using waybill number '{WaybillNo}'",
+                    orderId, waybillNumberForDownload);
 
                 var vendorId = order.VendorId ?? "default";
                 var (token, _) = await GetOrRefreshTokenAsync(vendorId);
@@ -695,12 +474,94 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     return null;
                 }
 
-                var response = await _skypointApiClient.DownloadWaybillAsync(waybillNumberForDownload, token);
-                if (response != null)
+                if (!string.IsNullOrEmpty(order.SkypointBookingId))
                 {
-                    response.FileName = $"waybill_{order.OrderNumber}.pdf";
+                    try
+                    {
+                        _logger.LogInformation("Fetching booking details for booking ID {BookingId} to retrieve latest waybill number", order.SkypointBookingId);
+                        var bookingResponse = await _skypointApiClient.GetBookingDetailsAsync(order.SkypointBookingId, token);
+                        if (bookingResponse != null)
+                        {
+                            var rawJson = System.Text.Json.JsonSerializer.Serialize(bookingResponse);
+                            _logger.LogInformation("Booking details response JSON: {Json}", rawJson);
+                            
+                            string? fetchedWaybillNo = null;
+                            if (bookingResponse.WaybillResponse != null)
+                            {
+                                if (bookingResponse.WaybillResponse is System.Text.Json.JsonElement jsonEl && jsonEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+                                {
+                                    if (jsonEl.TryGetProperty("waybillNumber", out var wbProp) && wbProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                    {
+                                        fetchedWaybillNo = wbProp.GetString();
+                                    }
+                                }
+                                else
+                                {
+                                    try
+                                    {
+                                        var serialized = System.Text.Json.JsonSerializer.Serialize(bookingResponse.WaybillResponse);
+                                        using var doc = System.Text.Json.JsonDocument.Parse(serialized);
+                                        if (doc.RootElement.TryGetProperty("waybillNumber", out var wbProp) && wbProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                                        {
+                                            fetchedWaybillNo = wbProp.GetString();
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Ignore
+                                    }
+                                }
+                            }
+
+                            if (string.IsNullOrEmpty(fetchedWaybillNo) && bookingResponse.ParcelDimensions != null)
+                            {
+                                fetchedWaybillNo = bookingResponse.ParcelDimensions
+                                    .FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
+                                    ?.ParcelTrackNo;
+                            }
+
+                            if (!string.IsNullOrEmpty(fetchedWaybillNo))
+                            {
+                                order.SkypointWaybillNo = fetchedWaybillNo;
+                                waybillNumberForDownload = fetchedWaybillNo;
+                                _logger.LogInformation("Successfully retrieved waybill number {WaybillNo} from booking details for order {OrderId}", fetchedWaybillNo, orderId);
+                                await _orderStore.UpdateOrderAsync(order);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to fetch latest waybill number from booking details for order {OrderId}", orderId);
+                    }
                 }
-                return response;
+
+                if (string.IsNullOrEmpty(waybillNumberForDownload))
+                {
+                    _logger.LogWarning("Cannot download waybill for order {OrderId} - waybill number is empty", orderId);
+                    return null;
+                }
+
+                WaybillDownloadResponse? response = null;
+                try
+                {
+                    response = await _skypointApiClient.DownloadWaybillAsync(waybillNumberForDownload, token);
+                    if (response != null && string.IsNullOrEmpty(response.FileName))
+                    {
+                        response.FileName = $"{waybillNumberForDownload}.pdf";
+                    }
+                }
+                catch (Exception apiEx)
+                {
+                    _logger.LogError(apiEx, "Failed to download waybill {WaybillNo} from API.", waybillNumberForDownload);
+                }
+
+                if (response != null && !string.IsNullOrEmpty(response.FileStream))
+                {
+                    return response;
+                }
+
+                _logger.LogWarning("No waybill PDF could be retrieved from the SkyPoint API for order {OrderId} (Waybill number: {WaybillNo}). No fallback generation is performed.", orderId, waybillNumberForDownload);
+                return null;
             }
             catch (Exception ex)
             {
@@ -751,85 +612,6 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
 
             return (null, null);
-        }
-
-        private static bool _fontResolverRegistered = false;
-        private static readonly object _fontResolverLock = new();
-
-        private static void EnsureFontResolver()
-        {
-            if (!_fontResolverRegistered)
-            {
-                lock (_fontResolverLock)
-                {
-                    if (!_fontResolverRegistered)
-                    {
-                        try
-                        {
-                            GlobalFontSettings.FontResolver = new SimpleFontResolver();
-                        }
-                        catch (Exception)
-                        {
-                            // Already registered
-                        }
-                        _fontResolverRegistered = true;
-                    }
-                }
-            }
-        }
-    }
-
-    public class SimpleFontResolver : IFontResolver
-    {
-        public FontResolverInfo? ResolveTypeface(string familyName, bool isBold, bool isItalic)
-        {
-            string fontFileName = "arial.ttf";
-            if (isBold && isItalic) fontFileName = "arialbi.ttf";
-            else if (isBold) fontFileName = "arialbd.ttf";
-            else if (isItalic) fontFileName = "ariali.ttf";
-
-            return new FontResolverInfo(fontFileName);
-        }
-
-        public byte[]? GetFont(string faceName)
-        {
-            // Windows standard fonts path
-            var windowsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts", faceName);
-            if (File.Exists(windowsPath))
-                return File.ReadAllBytes(windowsPath);
-
-            // Linux standard search paths
-            var searchPaths = new[]
-            {
-                "/usr/share/fonts/truetype/msttcorefonts",
-                "/usr/share/fonts/truetype/dejavu",
-                "/usr/share/fonts/dejavu",
-                "/usr/share/fonts"
-            };
-
-            foreach (var dir in searchPaths)
-            {
-                if (Directory.Exists(dir))
-                {
-                    var file = Path.Combine(dir, faceName);
-                    if (File.Exists(file))
-                        return File.ReadAllBytes(file);
-
-                    // Case-insensitive search on Linux
-                    try
-                    {
-                        var files = Directory.GetFiles(dir, "*", SearchOption.AllDirectories);
-                        foreach (var f in files)
-                        {
-                            if (Path.GetFileName(f).Equals(faceName, StringComparison.OrdinalIgnoreCase))
-                                return File.ReadAllBytes(f);
-                        }
-                    }
-                    catch { }
-                }
-            }
-
-            return null;
         }
     }
 }

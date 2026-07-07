@@ -248,5 +248,30 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 return result!;
             });
         }
+
+        public async Task<BookingResponse> GetBookingDetailsAsync(string bookingId, string authToken)
+        {
+            var url = _settings.GetBookingDetailsUrl(bookingId);
+            _logger.LogInformation("Booking details fetch request to {Url}", url);
+
+            return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
+            {
+                var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+                httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
+
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Booking details fetch API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                    throw new HttpRequestException($"Skypoint booking details fetch API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
+                }
+
+                var result = JsonSerializer.Deserialize<BookingResponse>(responseBody, _jsonOptions);
+                _logger.LogInformation("Successfully retrieved booking details for ID {BookingId}. Status: {Status}", bookingId, result?.Status);
+                return result!;
+            });
+        }
     }
 }

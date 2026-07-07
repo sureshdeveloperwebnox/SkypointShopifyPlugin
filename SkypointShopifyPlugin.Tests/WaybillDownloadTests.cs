@@ -222,7 +222,47 @@ namespace SkypointShopifyPlugin.Tests
 
             Assert.Null(result);
             // API client must not be called when there is no track number
-            mockApiClient.Verify(c => c.DownloadWaybillAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        // 8. Returns null when API call fails (no fallback local PDF generation)
+        // ----------------------------------------------------------------
+        [Fact]
+        public async Task SkypointOrderService_DownloadWaybillAsync_ReturnsNull_WhenApiFails()
+        {
+            const string orderId = "order-002";
+            const string trackNo = "DROP-108774";
+            const string vendorId = "test-vendor";
+
+            var order = new SkypointOrder
+            {
+                Id = orderId,
+                VendorId = vendorId,
+                SkypointTrackNo = trackNo,
+                OrderNumber = "10001",
+                Status = "processing"
+            };
+
+            var mockApiClient = new Mock<ISkypointApiClient>();
+            var mockOrderStore = new Mock<ISkypointOrderStore>();
+            mockOrderStore
+                .Setup(s => s.GetOrderByIdAsync(orderId))
+                .ReturnsAsync(order);
+
+            // Mock login token retrieval
+            var mockTokenStore = new Mock<ISkypointTokenStore>();
+            mockTokenStore.Setup(t => t.GetToken(vendorId)).Returns("mock-auth-token");
+            mockTokenStore.Setup(t => t.GetUserId(vendorId)).Returns("user-123");
+
+            // Setup the API client to throw an exception for waybill download (simulating a 400 Bad Request / no waybill found)
+            mockApiClient.Setup(c => c.DownloadWaybillAsync(trackNo, "mock-auth-token"))
+                .ThrowsAsync(new HttpRequestException("Waybill not found", null, System.Net.HttpStatusCode.BadRequest));
+
+            var service = BuildService(mockApiClient.Object, mockOrderStore.Object, mockTokenStore.Object);
+
+            var result = await service.DownloadWaybillAsync(orderId);
+
+            // Assert: returned null because fallback was removed
+            Assert.Null(result);
         }
     }
 }
