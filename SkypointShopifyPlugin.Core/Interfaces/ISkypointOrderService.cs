@@ -54,6 +54,11 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         Task<bool> SyncOrderStatusAsync(string orderId);
 
         /// <summary>
+        /// Download waybill file details
+        /// </summary>
+        Task<WaybillDownloadResponse?> DownloadWaybillAsync(string orderId);
+
+        /// <summary>
         /// Update order with PUDO counter details
         /// </summary>
         Task<bool> UpdateOrderPudoAsync(

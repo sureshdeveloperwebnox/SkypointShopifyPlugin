@@ -251,6 +251,27 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 return StatusCode(500, new { success = false, message = "Failed to update PUDO details" });
             }
         }
+
+        /// <summary>
+        /// Download waybill PDF for an order
+        /// GET /api/skypoint/orders/{orderId}/waybill/download
+        /// </summary>
+        [HttpGet("{orderId}/waybill/download")]
+        public async Task<IActionResult> DownloadWaybill(string orderId)
+        {
+            _logger.LogInformation("Download waybill request for order {OrderId}", orderId);
+
+            var result = await _orderService.DownloadWaybillAsync(orderId);
+
+            if (result != null)
+            {
+                return Ok(result);
+            }
+            else
+            {
+                return NotFound(new { success = false, message = "Waybill not found or download failed" });
+            }
+        }
     }
 
     /// <summary>

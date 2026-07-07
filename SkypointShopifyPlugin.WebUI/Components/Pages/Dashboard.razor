@@ -250,7 +250,22 @@
                                                         <i class="fas fa-box-open mr-1"></i> Parcel & Pricing
                                                     </button>
                                                 </div>
-                                                <button @onclick="() => selectedOrder = null" style="background: transparent; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+                                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                                    @if (!string.IsNullOrEmpty(order.SkypointTrackNo))
+                                                    {
+                                                        <button @onclick="() => DownloadWaybillPdf(order.Id)" class="btn-skynet-green" style="margin: 0; padding: 0.4rem 1.2rem; font-size: 0.85rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.4rem;" disabled="@isDownloadingWaybill">
+                                                            @if (isDownloadingWaybill && downloadingOrderId == order.Id)
+                                                            {
+                                                                <i class="fas fa-spinner fa-spin"></i> <span>Downloading...</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="fas fa-file-download"></i> <span>Download Waybill</span>
+                                                            }
+                                                        </button>
+                                                    }
+                                                    <button @onclick="() => selectedOrder = null" style="background: transparent; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+                                                </div>
                                             </div>
 
                                             @if (activeTab == "timeline")
@@ -468,6 +483,8 @@
     private bool isLoadingOrders = false;
     private string activeTab = "timeline";
     private bool isLoadingPudoSelection = false;
+    private bool isDownloadingWaybill = false;
+    private string? downloadingOrderId;
 
     // Pagination & Filtering
     private int currentPage = 1;
@@ -486,6 +503,16 @@
         {
             try
             {
+                await JSRuntime.InvokeVoidAsync("eval", @"
+                    window.downloadBase64File = function(base64String, fileName, mimeType) {
+                        const linkSource = 'data:' + mimeType + ';base64,' + base64String;
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = linkSource;
+                        downloadLink.download = fileName;
+                        downloadLink.click();
+                    };
+                ");
+
                 var tokenResult = await SessionStorage.GetAsync<string>("skypoint_token");
                 if (!tokenResult.Success || string.IsNullOrEmpty(tokenResult.Value))
                 {
@@ -1020,6 +1047,55 @@
         finally
         {
             isLoadingPudoSelection = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadWaybillPdf(string orderId)
+    {
+        if (isDownloadingWaybill) return;
+
+        isDownloadingWaybill = true;
+        downloadingOrderId = orderId;
+        StateHasChanged();
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/skypoint/orders/{orderId}/waybill/download");
+            if (!string.IsNullOrEmpty(token))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            }
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadFromJsonAsync<WaybillDownloadResponse>();
+                if (data != null && !string.IsNullOrEmpty(data.FileStream))
+                {
+                    var mimeType = data.ApplicationType ?? "application/pdf";
+                    var fileName = data.FileName ?? $"waybill_{orderId}.pdf";
+                    await JSRuntime.InvokeVoidAsync("downloadBase64File", data.FileStream, fileName, mimeType);
+                    carrierMessage = "Waybill downloaded successfully.";
+                }
+                else
+                {
+                    carrierMessage = "Failed to download waybill: Response stream was empty.";
+                }
+            }
+            else
+            {
+                var errBody = await response.Content.ReadAsStringAsync();
+                carrierMessage = $"Failed to download waybill: {response.ReasonPhrase}. Details: {errBody}";
+            }
+        }
+        catch (Exception ex)
+        {
+            carrierMessage = $"Error downloading waybill: {ex.Message}";
+        }
+        finally
+        {
+            isDownloadingWaybill = false;
+            downloadingOrderId = null;
             StateHasChanged();
         }
     }

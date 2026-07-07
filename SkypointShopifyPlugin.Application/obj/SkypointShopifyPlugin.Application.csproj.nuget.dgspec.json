@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {}
+    "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {}
   },
   "projects": {
-    "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {
+    "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj",
+        "projectUniqueName": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj",
         "projectName": "SkypointShopifyPlugin.Application",
-        "projectPath": "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj",
+        "projectPath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\SkypointShopifyPlugin.Application.csproj",
         "packagesPath": "C:\\Users\\sures\\.nuget\\packages\\",
-        "outputPath": "d:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\obj\\",
+        "outputPath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Application\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

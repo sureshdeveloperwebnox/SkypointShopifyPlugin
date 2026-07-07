@@ -82,5 +82,8 @@ namespace SkypointShopifyPlugin.Core.Configuration
 
         /// <summary>Gets the full selected PUDO point URL for a specific session GUID</summary>
         public string GetPudoSelectedUrl(string guid) => $"{BaseUrl}{PudoEndpoint}/{guid}";
+
+        /// <summary>Gets the full waybill download URL for a specific waybill number</summary>
+        public string GetWaybillDownloadUrl(string waybillNumber) => $"{BaseUrl}/api/service/booking/download/waybill/{waybillNumber}";
     }
 }

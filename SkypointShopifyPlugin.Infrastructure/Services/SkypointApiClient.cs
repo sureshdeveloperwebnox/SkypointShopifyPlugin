@@ -222,5 +222,31 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 return result!;
             });
         }
+
+        public async Task<WaybillDownloadResponse> DownloadWaybillAsync(string waybillNumber, string authToken)
+        {
+            var url = _settings.GetWaybillDownloadUrl(waybillNumber);
+            _logger.LogInformation("Waybill download request to {Url}", url);
+
+            return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
+            {
+                var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
+                httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
+
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Waybill Download API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                    throw new HttpRequestException($"Skypoint Waybill Download API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
+                }
+
+                var result = JsonSerializer.Deserialize<WaybillDownloadResponse>(responseBody, _jsonOptions);
+                _logger.LogInformation("Successfully retrieved waybill download info for {WaybillNumber}. File size: {Length} characters", 
+                    waybillNumber, result?.FileStream?.Length ?? 0);
+                return result!;
+            });
+        }
     }
 }

@@ -422,6 +422,35 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
         }
 
+        public async Task<WaybillDownloadResponse?> DownloadWaybillAsync(string orderId)
+        {
+            try
+            {
+                var order = await _orderStore.GetOrderByIdAsync(orderId);
+                if (order == null || string.IsNullOrEmpty(order.SkypointTrackNo))
+                {
+                    _logger.LogWarning("Cannot download waybill for order {OrderId} - order not found or has no track number", orderId);
+                    return null;
+                }
+
+                var vendorId = order.VendorId ?? "default";
+                var (token, _) = await GetOrRefreshTokenAsync(vendorId);
+
+                if (string.IsNullOrEmpty(token))
+                {
+                    _logger.LogError("SkyPoint API credentials/token not configured or expired for vendor {VendorId} when downloading waybill for order {OrderId}", vendorId, orderId);
+                    return null;
+                }
+
+                return await _skypointApiClient.DownloadWaybillAsync(order.SkypointTrackNo, token);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading waybill for order {OrderId}", orderId);
+                return null;
+            }
+        }
+
         private async Task<(string? token, string? userId)> GetOrRefreshTokenAsync(string vendorId)
         {
             var token = _skypointTokenStore.GetToken(vendorId);
