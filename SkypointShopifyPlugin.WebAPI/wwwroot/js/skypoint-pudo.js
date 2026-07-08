@@ -77,27 +77,32 @@
     // =========================================================================
     domReady(function () {
         updateDiag('DOM ready. path=' + path + ' isCart=' + isCartPage + ' fetching cart.js...');
-        fetch(normalizedRoot + '/cart.js')
-            .then(function (r) { return r.json(); })
-            .then(function (cart) {
-                updateDiag('cart.js OK. Booting...');
-                if (cart.attributes && cart.attributes.pudo_code) {
-                    currentPudo = {
-                        code:     cart.attributes.pudo_code     || '',
-                        name:     cart.attributes.pudo_name     || '',
-                        addr1:    cart.attributes.pudo_addr1    || '',
-                        addr2:    cart.attributes.pudo_addr2    || '',
-                        city:     cart.attributes.pudo_city     || '',
-                        pcode:    cart.attributes.pudo_zip      || '',
-                        provider: cart.attributes.pudo_provider || ''
-                    };
-                }
-                boot();
-            })
-            .catch(function (err) {
-                updateDiag('cart.js FAILED: ' + err + '. Booting anyway...');
-                boot();
-            });
+        try {
+            fetch(normalizedRoot + '/cart.js')
+                .then(function (r) { return r.json(); })
+                .then(function (cart) {
+                    updateDiag('cart.js OK. Booting...');
+                    if (cart.attributes && cart.attributes.pudo_code) {
+                        currentPudo = {
+                            code:     cart.attributes.pudo_code     || '',
+                            name:     cart.attributes.pudo_name     || '',
+                            addr1:    cart.attributes.pudo_addr1    || '',
+                            addr2:    cart.attributes.pudo_addr2    || '',
+                            city:     cart.attributes.pudo_city     || '',
+                            pcode:    cart.attributes.pudo_zip      || '',
+                            provider: cart.attributes.pudo_provider || ''
+                        };
+                    }
+                    boot();
+                })
+                .catch(function (err) {
+                    updateDiag('cart.js FAILED: ' + err + '. Booting anyway...');
+                    boot();
+                });
+        } catch (syncErr) {
+            updateDiag('cart.js SYNC EXCEPTION: ' + syncErr + '. Booting anyway...');
+            boot();
+        }
     });
 
     function boot() {
@@ -340,6 +345,26 @@
                 showBlockedToast();
             }
         }, true);
+
+        // Global delegation for PUDO buttons to withstand dynamic theme re-renders
+        document.addEventListener('click', function (e) {
+            var target = e.target;
+            while (target && target !== document.documentElement) {
+                if (target.id === 'sp-inline-select' || target.id === 'sp-float-btn') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    launchSelector();
+                    return;
+                }
+                if (target.id === 'sp-inline-clear') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    clearPudo();
+                    return;
+                }
+                target = target.parentElement;
+            }
+        }, true);
     }
 
     function pulseFloat() {
@@ -446,6 +471,33 @@
     // PUDO SELECTOR POPUP
     // =========================================================================
     function launchSelector() {
+        // Open a blank popup synchronously to bypass browser popup blocker
+        var W = 820, H = 660;
+        var popup = window.open('about:blank', 'SkyPointPudo',
+            'width=' + W + ',height=' + H +
+            ',left=' + Math.round((screen.width - W) / 2) +
+            ',top=' + Math.round((screen.height - H) / 2) +
+            ',resizable=yes,scrollbars=yes');
+
+        if (!popup) {
+            alert('Popup was blocked! Please allow popups for this site and try again.');
+            return;
+        }
+
+        try {
+            var doc = popup.document;
+            doc.open();
+            doc.write('<html><head><title>Loading PUDO Selector...</title>' +
+                '<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#64748b;}</style>' +
+                '</head><body><div>' +
+                '<h3 style="margin:0 0 8px 0;color:#0f172a;">Loading PUDO Selector...</h3>' +
+                '<p style="margin:0;font-size:14px;">Connecting to SkyPoint shipping services...</p>' +
+                '</div></body></html>');
+            doc.close();
+        } catch (e) {
+            // Ignore cross-origin issues
+        }
+
         var apiUrl = backendUrl + '/api/pudo/widget-url'
             + '?shop='    + encodeURIComponent(shopDomain)
             + '&address=' + encodeURIComponent('South Africa')
@@ -460,34 +512,49 @@
             })
             .then(function (resp) {
                 if (!resp.success || !resp.widget_url) throw new Error('Invalid response');
-                openPudoPopup(resp.guid, resp.widget_url);
+                openPudoPopup(resp.guid, resp.widget_url, popup);
             })
             .catch(function (err) {
                 console.error('[SkyPoint] Could not get widget URL:', err);
+                popup.close();
                 alert('Could not load PUDO selector. Please try again.\n\nError: ' + err.message);
             });
     }
 
-    function openPudoPopup(guid, url) {
-        var W = 820, H = 660;
-        var popup = window.open(url, 'SkyPointPudo',
-            'width=' + W + ',height=' + H +
-            ',left=' + Math.round((screen.width - W) / 2) +
-            ',top=' + Math.round((screen.height - H) / 2) +
-            ',resizable=yes,scrollbars=yes');
-
-        if (!popup) {
-            alert('Popup was blocked! Please allow popups for this site and try again.');
-            return;
+    function openPudoPopup(guid, url, popup) {
+        if (!popup || popup.closed) {
+            var W = 820, H = 660;
+            popup = window.open(url, 'SkyPointPudo',
+                'width=' + W + ',height=' + H +
+                ',left=' + Math.round((screen.width - W) / 2) +
+                ',top=' + Math.round((screen.height - H) / 2) +
+                ',resizable=yes,scrollbars=yes');
+            if (!popup) {
+                alert('Popup was blocked! Please allow popups for this site and try again.');
+                return;
+            }
+        } else {
+            try {
+                popup.location.href = url;
+            } catch (e) {
+                var W = 820, H = 660;
+                popup = window.open(url, 'SkyPointPudo',
+                    'width=' + W + ',height=' + H +
+                    ',left=' + Math.round((screen.width - W) / 2) +
+                    ',top=' + Math.round((screen.height - H) / 2) +
+                    ',resizable=yes,scrollbars=yes');
+            }
         }
-        popup.focus();
+        try {
+            popup.focus();
+        } catch (e) {}
 
         function onMessage(event) {
             var data = event.data;
             if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) {} }
             if (!data || data.result !== 'success') return;
 
-            popup.close();
+            try { popup.close(); } catch (e) {}
             window.removeEventListener('message', onMessage);
             console.log('[SkyPoint] Selection received, GUID:', guid);
 
