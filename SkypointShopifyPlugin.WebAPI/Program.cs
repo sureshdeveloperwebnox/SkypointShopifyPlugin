@@ -102,7 +102,8 @@ app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
     {
-        if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+        if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+            ctx.File.Name.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
         {
             ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
             ctx.Context.Response.Headers.Append("Pragma", "no-cache");
