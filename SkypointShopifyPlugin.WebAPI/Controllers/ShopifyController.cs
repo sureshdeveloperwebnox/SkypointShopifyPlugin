@@ -88,7 +88,14 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         public IActionResult Default(string shop)
         {
             if (string.IsNullOrEmpty(shop))
+            {
+                var webUiUrl = _configuration["WebUi:BaseUrl"]?.TrimEnd('/');
+                if (!string.IsNullOrEmpty(webUiUrl))
+                {
+                    return Redirect($"{webUiUrl}/login?v={DateTime.UtcNow.Ticks}");
+                }
                 return Redirect($"/login?v={DateTime.UtcNow.Ticks}");
+            }
 
             shop = NormalizeShopDomain(shop);
             _logger.LogInformation("Install request from shop: {Shop}", shop);
@@ -154,6 +161,10 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                         // Register webhooks automatically
                         await _shopifyAdminService.SyncWebhooksAsync(shop, accessToken, publicBase);
                         _logger.LogInformation("Webhooks registered automatically for {Shop}", shop);
+
+                        // Register script tags automatically
+                        await _shopifyAdminService.SyncScriptTagsAsync(shop, accessToken, publicBase);
+                        _logger.LogInformation("Script tags registered automatically for {Shop}", shop);
                     }
                     catch (Exception ex)
                     {
@@ -162,6 +173,11 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 });
 
                 // Redirect to app UI
+                var webUiUrl = _configuration["WebUi:BaseUrl"]?.TrimEnd('/');
+                if (!string.IsNullOrEmpty(webUiUrl))
+                {
+                    return Redirect($"{webUiUrl}/login?shop={Uri.EscapeDataString(shop)}&v={DateTime.UtcNow.Ticks}");
+                }
                 return Redirect($"/login?shop={Uri.EscapeDataString(shop)}&v={DateTime.UtcNow.Ticks}");
             }
             catch (Exception ex)
@@ -236,6 +252,17 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Webhook sync failed for {Shop}", shop);
+            }
+
+            // Register script tags automatically
+            try
+            {
+                await _shopifyAdminService.SyncScriptTagsAsync(shop, accessToken, publicBase);
+                _logger.LogInformation("Script tags synced for {Shop}", shop);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Script tag sync failed for {Shop}", shop);
             }
 
             if (!carrierServiceUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))

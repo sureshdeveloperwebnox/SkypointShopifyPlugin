@@ -82,6 +82,50 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
         }
 
+        public async Task<(bool success, string message)> SyncScriptTagsAsync(
+            string shopDomain,
+            string accessToken,
+            string publicBaseUrl)
+        {
+            try
+            {
+                publicBaseUrl = publicBaseUrl.TrimEnd('/');
+                var desiredUrl = $"{publicBaseUrl}/js/skypoint-pudo.js";
+
+                var existing = await GetScriptTagsAsync(shopDomain, accessToken);
+                var deleted = 0;
+                var created = false;
+
+                foreach (var st in existing)
+                {
+                    if (st.Src.Contains("/js/skypoint-pudo.js", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (st.Src.Equals(desiredUrl, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogInformation("Script tag already registered and up-to-date for {Shop}: {Url}", shopDomain, st.Src);
+                            return (true, "Script tag already registered and up-to-date.");
+                        }
+
+                        // Stale domain (ngrok changed), delete it
+                        _logger.LogInformation("Deleting stale script tag {Id} ({Url}) for {Shop}", st.Id, st.Src, shopDomain);
+                        if (await DeleteScriptTagAsync(shopDomain, accessToken, st.Id))
+                            deleted++;
+                    }
+                }
+
+                // Create the new script tag
+                _logger.LogInformation("Registering new script tag ({Url}) for {Shop}", desiredUrl, shopDomain);
+                created = await CreateScriptTagAsync(shopDomain, accessToken, desiredUrl);
+
+                return (true, $"Script tag sync complete. Deleted stale: {deleted}, created: {created}.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing Shopify script tags for {Shop}", shopDomain);
+                return (false, $"Exception: {ex.Message}");
+            }
+        }
+
         /// <summary>
         /// Creates the carrier service via REST API.
         /// Shopify automatically makes it available in the shipping profile UI
@@ -197,6 +241,66 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         // ── helpers ───────────────────────────────────────────────────────────────────────
 
         private record ShopifyWebhook(string Id, string Topic, string Address);
+        private record ShopifyScriptTag(string Id, string Src);
+
+        private async Task<List<ShopifyScriptTag>> GetScriptTagsAsync(string shopDomain, string accessToken)
+        {
+            var url = $"https://{shopDomain}/admin/api/2024-01/script_tags.json";
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("X-Shopify-Access-Token", accessToken);
+
+            var resp = await _httpClient.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
+            _logger.LogInformation("Existing script tags response {Status}: {Body}", resp.StatusCode, body);
+
+            if (!resp.IsSuccessStatusCode)
+                return new List<ShopifyScriptTag>();
+
+            var json = JsonNode.Parse(body);
+            var scriptTags = json?["script_tags"]?.AsArray();
+            if (scriptTags == null)
+                return new List<ShopifyScriptTag>();
+
+            return scriptTags
+                .Select(st => new ShopifyScriptTag(
+                    st?["id"]?.ToString() ?? string.Empty,
+                    st?["src"]?.ToString() ?? string.Empty))
+                .Where(st => !string.IsNullOrEmpty(st.Id))
+                .ToList();
+        }
+
+        private async Task<bool> DeleteScriptTagAsync(string shopDomain, string accessToken, string scriptTagId)
+        {
+            var url = $"https://{shopDomain}/admin/api/2024-01/script_tags/{scriptTagId}.json";
+            var req = new HttpRequestMessage(HttpMethod.Delete, url);
+            req.Headers.Add("X-Shopify-Access-Token", accessToken);
+
+            var resp = await _httpClient.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
+            _logger.LogInformation("Delete script tag {Id} response {Status}: {Body}", scriptTagId, resp.StatusCode, body);
+
+            return resp.IsSuccessStatusCode;
+        }
+
+        private async Task<bool> CreateScriptTagAsync(string shopDomain, string accessToken, string srcUrl)
+        {
+            var url = $"https://{shopDomain}/admin/api/2024-01/script_tags.json";
+            var bodyObj = new
+            {
+                script_tag = new
+                {
+                    event_name = "onload",
+                    @event = "onload",
+                    src = srcUrl
+                }
+            };
+
+            var resp = await PostJsonAsync(url, accessToken, bodyObj);
+            var body = await resp.Content.ReadAsStringAsync();
+            _logger.LogInformation("Create script tag response {Status}: {Body}", resp.StatusCode, body);
+
+            return resp.IsSuccessStatusCode;
+        }
 
         private async Task<List<ShopifyWebhook>> GetWebhooksAsync(string shopDomain, string accessToken)
         {

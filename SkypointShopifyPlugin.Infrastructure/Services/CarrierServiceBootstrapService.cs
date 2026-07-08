@@ -117,15 +117,35 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                         _logger.LogWarning(
                             "CarrierServiceBootstrap: removed invalid Shopify token for {Shop} — " +
                             "merchant must reconnect via dashboard.", shop);
+                        return;
                     }
                 }
+
+                // Also automatically sync script tags on startup to handle ngrok URL changes
+                var (stSuccess, stMsg) = await adminService.SyncScriptTagsAsync(
+                    shop, accessToken, publicBase);
+                if (stSuccess)
+                    _logger.LogInformation(
+                        "CarrierServiceBootstrap ✓ Script tags synced for {Shop}: {Msg}", shop, stMsg);
+                else
+                    _logger.LogWarning(
+                        "CarrierServiceBootstrap ✗ Script tags sync failed for {Shop}: {Msg}", shop, stMsg);
+
+                // Also automatically sync webhooks on startup to handle ngrok URL changes
+                var (whSuccess, whMsg) = await adminService.SyncWebhooksAsync(
+                    shop, accessToken, publicBase);
+                if (whSuccess)
+                    _logger.LogInformation(
+                        "CarrierServiceBootstrap ✓ Webhooks synced for {Shop}: {Msg}", shop, whMsg);
+                else
+                    _logger.LogWarning(
+                        "CarrierServiceBootstrap ✗ Webhooks sync failed for {Shop}: {Msg}", shop, whMsg);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "CarrierServiceBootstrap: exception registering carrier for {Shop}", shop);
-            }
-        }
+                    "CarrierServiceBootstrap: exception registering carrier/script tags for {Shop}", shop);
+            }        }
 
         private static bool IsInvalidTokenMessage(string message)
             => message.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase)

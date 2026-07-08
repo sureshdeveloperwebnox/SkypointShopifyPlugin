@@ -54,6 +54,42 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             return await DoSyncWebhooks(shop, accessToken ?? string.Empty);
         }
 
+        /// <summary>
+        /// Force re-register the Shopify script tag with the current ngrok/public URL.
+        /// GET /api/admin/sync-script-tags?shop=yourstore.myshopify.com
+        /// No auth required for easy use during development.
+        /// </summary>
+        [HttpGet("sync-script-tags")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SyncScriptTagsGet([FromQuery] string shop)
+        {
+            if (string.IsNullOrEmpty(shop))
+                return BadRequest(new { error = "shop parameter required" });
+
+            shop = shop.Replace("https://", "").Replace("http://", "").TrimEnd('/');
+
+            var accessToken = _shopTokenStore.GetToken(shop);
+            if (string.IsNullOrEmpty(accessToken))
+                accessToken = await _oauthService.GetTokenViaClientCredentialsAsync(shop);
+
+            if (string.IsNullOrEmpty(accessToken))
+                return BadRequest(new { error = "No access token found. Please reinstall the app." });
+
+            var publicBase = BuildPublicBaseUrl(_configuration);
+            var desiredUrl = $"{publicBase}/js/skypoint-pudo.js";
+
+            var (success, message) = await _shopifyAdminService.SyncScriptTagsAsync(shop, accessToken, publicBase);
+
+            return Ok(new
+            {
+                success,
+                message,
+                shop,
+                public_base = publicBase,
+                script_tag_url = desiredUrl
+            });
+        }
+
         private async Task<IActionResult> DoRegister(string shop, string accessToken)
         {
             _logger.LogInformation("Carrier service registration request for shop: {Shop}", shop);

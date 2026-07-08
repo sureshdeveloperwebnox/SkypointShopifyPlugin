@@ -3,18 +3,18 @@
 client_id = "43cc9e72087b61c72649cbabcd052072"
 name = "Skypoint Shipping"
 handle = "skypoint-shipping"
-application_url = "https://3aa1-2402-3a80-45b0-86f2-4915-3fd7-6a5f-d281.ngrok-free.app"
+application_url = "https://7dca-223-185-24-22.ngrok-free.app"
 embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
 
 [access_scopes]
-scopes = "read_orders,write_orders,read_products,write_products,read_shipping,write_shipping,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
+scopes = "read_orders,write_orders,read_products,write_products,read_shipping,write_shipping,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_script_tags,write_script_tags"
 
 [auth]
 redirect_urls = [
-  "https://3aa1-2402-3a80-45b0-86f2-4915-3fd7-6a5f-d281.ngrok-free.app/api/shopify/auth"
+  "https://7dca-223-185-24-22.ngrok-free.app/api/shopify/auth"
 ]
 
 [webhooks]

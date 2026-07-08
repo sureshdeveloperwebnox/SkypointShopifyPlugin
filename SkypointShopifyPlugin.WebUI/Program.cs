@@ -56,6 +56,35 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Proxy /js/* to WebAPI (serves skypoint-pudo.js and other static assets)
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/js"))
+    {
+        var backendUrl = builder.Configuration["BackendApi:BaseUrl"] ?? "http://localhost:5126";
+        var targetUri = new Uri($"{backendUrl.TrimEnd('/')}{context.Request.Path}{context.Request.QueryString}");
+
+        using var jsClient = new HttpClient();
+        try
+        {
+            var jsResponse = await jsClient.GetAsync(targetUri);
+            context.Response.StatusCode = (int)jsResponse.StatusCode;
+            foreach (var header in jsResponse.Content.Headers)
+                context.Response.Headers[header.Key] = header.Value.ToArray();
+            context.Response.Headers.Remove("transfer-encoding");
+            await jsResponse.Content.CopyToAsync(context.Response.Body);
+            return;
+        }
+        catch (Exception ex)
+        {
+            context.Response.StatusCode = StatusCodes.Status502BadGateway;
+            await context.Response.WriteAsync($"Error proxying JS file: {ex.Message}");
+            return;
+        }
+    }
+    await next();
+});
+
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/api"))
