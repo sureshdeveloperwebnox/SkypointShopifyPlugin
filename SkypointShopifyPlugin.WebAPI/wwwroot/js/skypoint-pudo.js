@@ -90,9 +90,32 @@
         if (d) d.textContent = '🔵 SkyPoint: ' + msg;
     }
 
-    // Generic, robust XHR request wrapper (bypasses any global fetch overrides/hooks from other apps)
+    var globalXHR = null;
+    function getNativeXHR() {
+        if (globalXHR) return globalXHR;
+        try {
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            var parent = document.body || document.documentElement;
+            if (parent) {
+                parent.appendChild(iframe);
+                if (iframe.contentWindow && iframe.contentWindow.XMLHttpRequest) {
+                    globalXHR = iframe.contentWindow.XMLHttpRequest;
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+        if (!globalXHR) {
+            globalXHR = XMLHttpRequest;
+        }
+        return globalXHR;
+    }
+
+    // Generic, robust XHR request wrapper (bypasses any global fetch/XHR overrides/hooks from other apps)
     function makeRequest(method, url, data, callback) {
-        var xhr = new XMLHttpRequest();
+        var XHR = getNativeXHR();
+        var xhr = new XHR();
         xhr.open(method, url, true);
         
         // Bypass ngrok warning page during development (only for absolute backend URLs)
