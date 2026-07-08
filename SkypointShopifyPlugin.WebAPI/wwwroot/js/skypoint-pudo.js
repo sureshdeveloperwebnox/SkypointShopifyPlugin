@@ -72,37 +72,64 @@
         if (d) d.textContent = '🔵 SkyPoint: ' + msg;
     }
 
+    // Generic, robust XHR request wrapper (bypasses any global fetch overrides/hooks from other apps)
+    function makeRequest(method, url, data, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open(method, url, true);
+        if (data) {
+            xhr.setRequestHeader('Content-Type', 'application/json');
+        }
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4) {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        var json = JSON.parse(xhr.responseText);
+                        callback(null, json);
+                    } catch (e) {
+                        callback(new Error('Invalid JSON: ' + e.message), null);
+                    }
+                } else {
+                    callback(new Error('HTTP ' + xhr.status), null);
+                }
+            }
+        };
+        xhr.onerror = function () {
+            callback(new Error('Network error'), null);
+        };
+        xhr.send(data ? JSON.stringify(data) : null);
+    }
+
     // =========================================================================
     // FETCH CART STATE THEN BOOT
     // =========================================================================
     domReady(function () {
-        updateDiag('DOM ready. path=' + path + ' isCart=' + isCartPage + ' fetching cart.js...');
-        try {
-            fetch(normalizedRoot + '/cart.js')
-                .then(function (r) { return r.json(); })
-                .then(function (cart) {
-                    updateDiag('cart.js OK. Booting...');
-                    if (cart.attributes && cart.attributes.pudo_code) {
-                        currentPudo = {
-                            code:     cart.attributes.pudo_code     || '',
-                            name:     cart.attributes.pudo_name     || '',
-                            addr1:    cart.attributes.pudo_addr1    || '',
-                            addr2:    cart.attributes.pudo_addr2    || '',
-                            city:     cart.attributes.pudo_city     || '',
-                            pcode:    cart.attributes.pudo_zip      || '',
-                            provider: cart.attributes.pudo_provider || ''
-                        };
-                    }
-                    boot();
-                })
-                .catch(function (err) {
-                    updateDiag('cart.js FAILED: ' + err + '. Booting anyway...');
-                    boot();
-                });
-        } catch (syncErr) {
-            updateDiag('cart.js SYNC EXCEPTION: ' + syncErr + '. Booting anyway...');
-            boot();
-        }
+        updateDiag('DOM ready. Booting UI immediately...');
+        
+        // Boot UI immediately so it is functional and not blocked by cart fetch latency
+        boot();
+
+        updateDiag('Fetching cart state...');
+        makeRequest('GET', normalizedRoot + '/cart.js', null, function (err, cart) {
+            if (err) {
+                updateDiag('Cart fetch optional step: ' + err.message);
+                return;
+            }
+            updateDiag('Cart fetch OK.');
+            if (cart && cart.attributes && cart.attributes.pudo_code) {
+                currentPudo = {
+                    code:     cart.attributes.pudo_code     || '',
+                    name:     cart.attributes.pudo_name     || '',
+                    addr1:    cart.attributes.pudo_addr1    || '',
+                    addr2:    cart.attributes.pudo_addr2    || '',
+                    city:     cart.attributes.pudo_city     || '',
+                    pcode:    cart.attributes.pudo_zip      || '',
+                    provider: cart.attributes.pudo_provider || ''
+                };
+                renderInlineWidget();
+                var fab = document.getElementById('sp-float');
+                if (fab) renderFloatingWidget(fab);
+            }
+        });
     });
 
     function boot() {
@@ -505,20 +532,21 @@
 
         console.log('[SkyPoint] Fetching widget URL from:', apiUrl);
 
-        fetch(apiUrl)
-            .then(function (r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
-            .then(function (resp) {
-                if (!resp.success || !resp.widget_url) throw new Error('Invalid response');
-                openPudoPopup(resp.guid, resp.widget_url, popup);
-            })
-            .catch(function (err) {
+        makeRequest('GET', apiUrl, null, function (err, resp) {
+            if (err) {
                 console.error('[SkyPoint] Could not get widget URL:', err);
-                popup.close();
+                try { popup.close(); } catch (e) {}
                 alert('Could not load PUDO selector. Please try again.\n\nError: ' + err.message);
-            });
+                return;
+            }
+            if (!resp.success || !resp.widget_url) {
+                console.error('[SkyPoint] Invalid widget URL response');
+                try { popup.close(); } catch (e) {}
+                alert('Could not load PUDO selector. Invalid response from server.');
+                return;
+            }
+            openPudoPopup(resp.guid, resp.widget_url, popup);
+        });
     }
 
     function openPudoPopup(guid, url, popup) {
@@ -558,19 +586,19 @@
             window.removeEventListener('message', onMessage);
             console.log('[SkyPoint] Selection received, GUID:', guid);
 
-            fetch(backendUrl + '/api/pudo/selected/' + encodeURIComponent(guid) + '?shop=' + encodeURIComponent(shopDomain))
-                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                .then(function (json) {
-                    if (json.success && json.pudo_point) {
-                        savePudo(json.pudo_point);
-                    } else {
-                        alert('Could not retrieve PUDO point details. Please try again.');
-                    }
-                })
-                .catch(function (err) {
+            var detailsUrl = backendUrl + '/api/pudo/selected/' + encodeURIComponent(guid) + '?shop=' + encodeURIComponent(shopDomain);
+            makeRequest('GET', detailsUrl, null, function (err, json) {
+                if (err) {
                     console.error('[SkyPoint] Error fetching PUDO details:', err);
                     alert('Could not connect to PUDO server. Please try again.');
-                });
+                    return;
+                }
+                if (json.success && json.pudo_point) {
+                    savePudo(json.pudo_point);
+                } else {
+                    alert('Could not retrieve PUDO point details. Please try again.');
+                }
+            });
         }
         window.addEventListener('message', onMessage);
     }
@@ -579,54 +607,52 @@
     // SAVE / CLEAR
     // =========================================================================
     function savePudo(point) {
-        fetch(normalizedRoot + '/cart/update.js', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                attributes: {
-                    pudo_code:     point.code     || '',
-                    pudo_name:     point.name     || '',
-                    pudo_addr1:    point.addr1    || '',
-                    pudo_addr2:    point.addr2    || '',
-                    pudo_city:     point.city     || '',
-                    pudo_zip:      point.pcode    || '',
-                    pudo_provider: point.provider || ''
-                }
-            })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function () {
+        var updateUrl = normalizedRoot + '/cart/update.js';
+        var data = {
+            attributes: {
+                pudo_code:     point.code     || '',
+                pudo_name:     point.name     || '',
+                pudo_addr1:    point.addr1    || '',
+                pudo_addr2:    point.addr2    || '',
+                pudo_city:     point.city     || '',
+                pudo_zip:      point.pcode    || '',
+                pudo_provider: point.provider || ''
+            }
+        };
+
+        makeRequest('POST', updateUrl, data, function (err, cart) {
+            if (err) {
+                console.error('[SkyPoint] Failed to save cart attributes:', err);
+                alert('Failed to save PUDO selection. Please try again.');
+                return;
+            }
             currentPudo = point;
             renderInlineWidget();
             var fab = document.getElementById('sp-float');
             if (fab) renderFloatingWidget(fab);
             console.log('[SkyPoint] Cart attributes saved.');
-        })
-        .catch(function (err) {
-            console.error('[SkyPoint] Failed to save cart attributes:', err);
-            alert('Failed to save PUDO selection. Please try again.');
         });
     }
 
     function clearPudo() {
-        fetch(normalizedRoot + '/cart/update.js', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                attributes: {
-                    pudo_code: '', pudo_name: '', pudo_addr1: '',
-                    pudo_addr2: '', pudo_city: '', pudo_zip: '', pudo_provider: ''
-                }
-            })
-        })
-        .then(function (r) { return r.json(); })
-        .then(function () {
+        var updateUrl = normalizedRoot + '/cart/update.js';
+        var data = {
+            attributes: {
+                pudo_code: '', pudo_name: '', pudo_addr1: '',
+                pudo_addr2: '', pudo_city: '', pudo_zip: '', pudo_provider: ''
+            }
+        };
+
+        makeRequest('POST', updateUrl, data, function (err, cart) {
+            if (err) {
+                console.error('[SkyPoint] Clear failed:', err);
+                return;
+            }
             currentPudo = null;
             renderInlineWidget();
             var fab = document.getElementById('sp-float');
             if (fab) renderFloatingWidget(fab);
-        })
-        .catch(function (err) { console.error('[SkyPoint] Clear failed:', err); });
+        });
     }
 
     function esc(s) {
