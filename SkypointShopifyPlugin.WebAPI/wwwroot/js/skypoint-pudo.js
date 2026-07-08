@@ -171,7 +171,8 @@
                             addr1:    cart.attributes.pudo_addr1    || '',
                             addr2:    cart.attributes.pudo_addr2    || '',
                             city:     cart.attributes.pudo_city     || '',
-                            pcode:    cart.attributes.pcode         || cart.attributes.pudo_zip || '',
+                            pcode:    cart.attributes.pudo_zip      || cart.attributes.pcode || '',
+                            zip:      cart.attributes.pudo_zip      || '',
                             provider: cart.attributes.pudo_provider || ''
                         };
                         renderInlineWidget();
@@ -372,10 +373,19 @@
     // MutationObserver for dynamic cart updates
     if (window.MutationObserver) {
         var obs = new MutationObserver(function () {
-            if (isCartPage && !inlineInjected) tryInlineInject();
-            // Refresh floating widget state
-            var fab = document.getElementById('sp-float');
-            if (fab) renderFloatingWidget(fab);
+            // Disconnect temporarily to avoid infinite loops during modifications
+            obs.disconnect();
+            try {
+                if (isCartPage) {
+                    if (!inlineInjected) tryInlineInject();
+                    if (!document.getElementById('sp-float')) {
+                        showFloatingWidget();
+                    }
+                }
+            } finally {
+                // Reconnect observer
+                obs.observe(document.documentElement, { childList: true, subtree: true });
+            }
         });
         domReady(function () {
             obs.observe(document.documentElement, { childList: true, subtree: true });
@@ -383,35 +393,102 @@
     }
 
     // =========================================================================
+    // PREFILLED CHECKOUT VIA BACKEND STOREFRONT API
+    // =========================================================================
+    function redirectToPrefilledCheckout(pudo) {
+        var shop = window.Shopify && window.Shopify.shop ? window.Shopify.shop : shopDomain;
+        var fallbackUrl = normalizedRoot + '/cart/checkout';
+
+        log('Creating prefilled checkout via backend for', pudo.name);
+
+        var redirected = false;
+        function doRedirect(url) {
+            if (redirected) return;
+            redirected = true;
+            window.location.href = url;
+        }
+
+        // Hard 4-second fallback — checkout ALWAYS works
+        var timeoutHandle = setTimeout(function () {
+            log('Backend timeout — falling back to normal checkout');
+            doRedirect(fallbackUrl);
+        }, 4000);
+
+        // Fetch latest cart details to get correct quantities/items
+        makeRequest('GET', normalizedRoot + '/cart.js', null, function (err, cart) {
+            if (err || !cart || !cart.items || cart.items.length === 0) {
+                log('Failed to fetch cart.js, falling back to standard checkout immediately:', err);
+                clearTimeout(timeoutHandle);
+                doRedirect(fallbackUrl);
+                return;
+            }
+
+            var lineItems = [];
+            for (var idx = 0; idx < cart.items.length; idx++) {
+                var it = cart.items[idx];
+                lineItems.push({
+                    VariantId: it.variant_id,
+                    Quantity:  it.quantity
+                });
+            }
+
+            var payload = {
+                Shop:      shop,
+                Address1:  pudo.addr1  || '',
+                Address2:  (pudo.name  || '') + (pudo.addr2 ? ', ' + pudo.addr2 : ''),
+                City:      pudo.city   || '',
+                Zip:       pudo.pcode  || pudo.zip  || '',
+                Country:   'ZA',
+                FirstName: 'PUDO',
+                LastName:  pudo.name   || 'Counter',
+                LineItems: lineItems
+            };
+
+            makeRequest('POST', backendUrl + '/api/pudo/checkout-url', payload, function (err2, data) {
+                clearTimeout(timeoutHandle);
+                if (!err2 && data && data.checkout_url) {
+                    log('Prefilled checkout URL received:', data.checkout_url);
+                    doRedirect(data.checkout_url);
+                } else {
+                    log('Prefilled checkout failed (' + (err2 ? err2.message : 'no url') + '), using fallback');
+                    doRedirect(fallbackUrl);
+                }
+            });
+        });
+    }
+
+
+    // =========================================================================
     // CHECKOUT INTERCEPTION
     // =========================================================================
     function interceptCheckout() {
+        // Capture checkout clicks/submits and redirect to a prefilled checkout URL.
+        // IMPORTANT: We NEVER permanently block — if anything fails we fall through to normal checkout.
+
+        function handleCheckoutIntent(e) {
+            // If no PUDO selected, just allow the normal checkout to proceed
+            if (!currentPudo) {
+                // Show a gentle reminder but don't block
+                showPudoReminder();
+                return; // allow default
+            }
+
+            // PUDO is selected — prevent default and create a prefilled checkout
+            if (e && e.preventDefault) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+            }
+            redirectToPrefilledCheckout(currentPudo);
+        }
+
+        // Click interception on checkout buttons
         document.addEventListener('click', function (e) {
             var target = e.target;
-            for (var i = 0; i < 4 && target; i++) {
+            for (var i = 0; i < 5 && target && target !== document.documentElement; i++) {
                 for (var k = 0; k < BTN_SELECTORS.length; k++) {
                     try {
                         if (target.matches && target.matches(BTN_SELECTORS[k])) {
-                            e.preventDefault();
-                            e.stopImmediatePropagation();
-
-                            if (!currentPudo) {
-                                pulseFloat();
-                                showBlockedToast();
-                                return;
-                            }
-
-                            // Redirect to checkout with prefilled PUDO address parameters
-                            var checkoutUrl = rootPath + 'checkout'
-                                + '?checkout[shipping_address][company]='  + encodeURIComponent(currentPudo.name + ' (' + currentPudo.code + ')')
-                                + '&checkout[shipping_address][address1]=' + encodeURIComponent(currentPudo.addr1)
-                                + '&checkout[shipping_address][address2]=' + encodeURIComponent(currentPudo.addr2 || '')
-                                + '&checkout[shipping_address][city]='     + encodeURIComponent(currentPudo.city)
-                                + '&checkout[shipping_address][zip]='      + encodeURIComponent(currentPudo.pcode)
-                                + '&checkout[shipping_address][country]='  + encodeURIComponent('South Africa');
-                            
-                            console.log('[SkyPoint] Redirecting to checkout with PUDO address:', checkoutUrl);
-                            window.location.href = checkoutUrl;
+                            handleCheckoutIntent(e);
                             return;
                         }
                     } catch (e2) {}
@@ -420,35 +497,16 @@
             }
         }, true);
 
+        // Form submit interception
         document.addEventListener('submit', function (e) {
             var form = e.target;
             if (form && form.action &&
                 (form.action.indexOf('/cart') !== -1 || form.action.indexOf('/checkout') !== -1)) {
-                
-                e.preventDefault();
-                e.stopImmediatePropagation();
-
-                if (!currentPudo) {
-                    pulseFloat();
-                    showBlockedToast();
-                    return;
-                }
-
-                // Redirect to checkout with prefilled PUDO address parameters
-                var checkoutUrl = rootPath + 'checkout'
-                    + '?checkout[shipping_address][company]='  + encodeURIComponent(currentPudo.name + ' (' + currentPudo.code + ')')
-                    + '&checkout[shipping_address][address1]=' + encodeURIComponent(currentPudo.addr1)
-                    + '&checkout[shipping_address][address2]=' + encodeURIComponent(currentPudo.addr2 || '')
-                    + '&checkout[shipping_address][city]='     + encodeURIComponent(currentPudo.city)
-                    + '&checkout[shipping_address][zip]='      + encodeURIComponent(currentPudo.pcode)
-                    + '&checkout[shipping_address][country]='  + encodeURIComponent('South Africa');
-                
-                console.log('[SkyPoint] Redirecting to checkout with PUDO address:', checkoutUrl);
-                window.location.href = checkoutUrl;
+                handleCheckoutIntent(e);
             }
         }, true);
 
-        // Global delegation for PUDO buttons to withstand dynamic theme re-renders
+        // Delegate PUDO button clicks
         document.addEventListener('click', function (e) {
             var target = e.target;
             while (target && target !== document.documentElement) {
@@ -468,6 +526,23 @@
             }
         }, true);
     }
+
+    function showPudoReminder() {
+        // Non-blocking gentle reminder at the top of the screen
+        if (document.getElementById('sp-remind')) return;
+        var t = document.createElement('div');
+        t.id = 'sp-remind';
+        t.textContent = '💡 Tip: Select a PUDO counter to get started — or continue to check out normally.';
+        Object.assign(t.style, {
+            position: 'fixed', top: '60px', left: '50%', transform: 'translateX(-50%)',
+            background: '#1e40af', color: '#fff', padding: '10px 20px', borderRadius: '8px',
+            zIndex: '2147483646', fontSize: '13px', fontFamily: 'Outfit,Inter,system-ui,sans-serif',
+            boxShadow: '0 4px 16px rgba(0,0,0,.25)', maxWidth: '90vw', textAlign: 'center'
+        });
+        document.body.appendChild(t);
+        setTimeout(function () { if (t.parentNode) t.remove(); }, 4000);
+    }
+
 
     function pulseFloat() {
         var fab = document.getElementById('sp-float');
@@ -494,15 +569,101 @@
     }
 
     // =========================================================================
-    // CHECKOUT PAGE BANNER
+    // CHECKOUT PAGE BANNER + ADDRESS PREFILL
     // =========================================================================
     function startCheckoutMode() {
-        var render = function () {
+        // Fetch PUDO data from cart attributes as source of truth
+        function getPudoFromCart(cb) {
+            fetch('/cart.js')
+                .then(function (r) { return r.json(); })
+                .then(function (cart) {
+                    var attrs = cart.attributes || {};
+                    if (attrs.pudo_addr1 || attrs.pudo_city) {
+                        cb({
+                            name:    attrs.pudo_name    || (currentPudo && currentPudo.name)    || '',
+                            code:    attrs.pudo_code    || (currentPudo && currentPudo.code)    || '',
+                            addr1:   attrs.pudo_addr1   || (currentPudo && currentPudo.addr1)   || '',
+                            addr2:   attrs.pudo_addr2   || (currentPudo && currentPudo.addr2)   || '',
+                            city:    attrs.pudo_city    || (currentPudo && currentPudo.city)    || '',
+                            zip:     attrs.pudo_zip     || (currentPudo && currentPudo.zip)     || '',
+                            country: attrs.pudo_country || (currentPudo && currentPudo.country) || 'ZA'
+                        });
+                    } else if (currentPudo) {
+                        cb(currentPudo);
+                    } else {
+                        cb(null);
+                    }
+                })
+                .catch(function () { cb(currentPudo || null); });
+        }
+
+        // Fill a single input and fire React/Vue/native change events
+        function fillInput(el, value) {
+            if (!el || el.value === value) return;
+            var nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            );
+            if (nativeInputValueSetter) {
+                nativeInputValueSetter.set.call(el, value);
+            } else {
+                el.value = value;
+            }
+            el.dispatchEvent(new Event('input',  { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('blur',   { bubbles: true }));
+        }
+
+        // Fill a <select> and fire events
+        function fillSelect(el, value) {
+            if (!el || el.value === value) return;
+            el.value = value;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        // Attempt to prefill all address fields
+        function applyPudo(pudo) {
+            if (!pudo) return;
+
+            // Shopify checkout field selectors (works for classic + new checkout)
+            var selectors = {
+                address1:  ['#checkout_shipping_address_address1',  '[name="checkout[shipping_address][address1]"]',  '[autocomplete="shipping address-line1"]'],
+                address2:  ['#checkout_shipping_address_address2',  '[name="checkout[shipping_address][address2]"]',  '[autocomplete="shipping address-line2"]'],
+                city:      ['#checkout_shipping_address_city',      '[name="checkout[shipping_address][city]"]',      '[autocomplete="shipping address-level2"]'],
+                zip:       ['#checkout_shipping_address_zip',       '[name="checkout[shipping_address][zip]"]',       '[autocomplete="shipping postal-code"]'],
+                country:   ['#checkout_shipping_address_country',   '[name="checkout[shipping_address][country]"]'],
+                firstName: ['#checkout_shipping_address_first_name','[name="checkout[shipping_address][first_name]"]','[autocomplete="shipping given-name"]'],
+                lastName:  ['#checkout_shipping_address_last_name', '[name="checkout[shipping_address][last_name]"]', '[autocomplete="shipping family-name"]']
+            };
+
+            function findEl(selectorList) {
+                for (var i = 0; i < selectorList.length; i++) {
+                    var el = document.querySelector(selectorList[i]);
+                    if (el) return el;
+                }
+                return null;
+            }
+
+            var addr1 = pudo.addr1 || pudo.name || '';
+            var addr2 = pudo.addr2 || '';
+            var city  = pudo.city  || '';
+            var zip   = pudo.zip   || '';
+
+            fillInput(findEl(selectors.address1), addr1);
+            fillInput(findEl(selectors.address2), addr2);
+            fillInput(findEl(selectors.city),     city);
+            fillInput(findEl(selectors.zip),      zip);
+            fillSelect(findEl(selectors.country), pudo.country || 'ZA');
+
+            log('Checkout prefill applied:', addr1, city, zip);
+        }
+
+        // Render the banner
+        function renderBanner(pudo) {
             if (document.getElementById('sp-checkout-banner')) return;
             var b = document.createElement('div');
             b.id = 'sp-checkout-banner';
-            if (currentPudo) {
-                b.innerHTML = '✅ <strong>PUDO Counter:</strong> ' + esc(currentPudo.name) + ' (' + esc(currentPudo.code) + ') — ' + esc(currentPudo.city);
+            if (pudo) {
+                b.innerHTML = '✅ <strong>PUDO Counter:</strong> ' + esc(pudo.name) + ' (' + esc(pudo.code) + ') — ' + esc(pudo.city);
                 b.style.background = '#16a34a';
             } else {
                 b.innerHTML = '📍 No PUDO counter selected. <a href="/cart" style="color:#fff;font-weight:700;text-decoration:underline">Back to cart</a> to choose one.';
@@ -516,11 +677,41 @@
                 boxShadow: '0 2px 8px rgba(0,0,0,.2)'
             });
             document.body.prepend(b);
-        };
+        }
+
+        // Main logic — wait for DOM, fetch cart, render, prefill, then watch for re-renders
+        function init() {
+            getPudoFromCart(function (pudo) {
+                renderBanner(pudo);
+                if (!pudo) return;
+
+                // Initial fill attempt
+                applyPudo(pudo);
+
+                // MutationObserver to re-apply if Shopify's React checkout re-renders the form
+                var retries = 0;
+                var maxRetries = 40; // ~20 seconds of watching
+                var observer = new MutationObserver(function () {
+                    applyPudo(pudo);
+                    retries++;
+                    if (retries >= maxRetries) observer.disconnect();
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+
+                // Also poll every 500ms for 10 seconds as extra safety net
+                var pollCount = 0;
+                var poller = setInterval(function () {
+                    applyPudo(pudo);
+                    pollCount++;
+                    if (pollCount >= 20) clearInterval(poller);
+                }, 500);
+            });
+        }
+
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', render);
+            document.addEventListener('DOMContentLoaded', init);
         } else {
-            render();
+            init();
         }
     }
 
@@ -600,9 +791,13 @@
             // Ignore cross-origin issues
         }
 
+        // Use currently selected point city/address as search hint, fallback to South Africa
+        var locationHint = (currentPudo && currentPudo.city) ? currentPudo.city + ', South Africa'
+                         : (currentPudo && currentPudo.addr1) ? currentPudo.addr1 + ', South Africa'
+                         : 'South Africa';
         var apiUrl = backendUrl + '/api/pudo/widget-url'
             + '?shop='    + encodeURIComponent(shopDomain)
-            + '&address=' + encodeURIComponent('South Africa')
+            + '&address=' + encodeURIComponent(locationHint)
             + '&domain='  + encodeURIComponent(window.location.origin);
 
         console.log('[SkyPoint] Fetching widget URL from:', apiUrl);
@@ -652,60 +847,126 @@
             popup.focus();
         } catch (e) {}
 
-        function onMessage(event) {
-            var data = event.data;
-            if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) {} }
-            if (!data || data.result !== 'success') return;
+        var finished = false;
+        var pollInterval = null;
 
-            try { popup.close(); } catch (e) {}
+        function cleanup() {
+            finished = true;
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
             window.removeEventListener('message', onMessage);
-            console.log('[SkyPoint] Selection received, GUID:', guid);
+        }
+
+        function handleSelectionSuccess() {
+            if (finished) return;
+            cleanup();
+            try { popup.close(); } catch (e) {}
+            console.log('[SkyPoint] Selection success detected. Closing popup & fetching details...');
 
             var detailsUrl = backendUrl + '/api/pudo/selected/' + encodeURIComponent(guid) + '?shop=' + encodeURIComponent(shopDomain);
             makeRequest('GET', detailsUrl, null, function (err, json) {
                 if (err) {
                     console.error('[SkyPoint] Error fetching PUDO details:', err);
-                    alert('Could not connect to PUDO server. Please try again.');
                     return;
                 }
                 if (json.success && json.pudo_point) {
                     savePudo(json.pudo_point);
-                } else {
-                    alert('Could not retrieve PUDO point details. Please try again.');
                 }
             });
         }
+
+        function onMessage(event) {
+            var data = event.data;
+            if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) {} }
+            if (data && (
+                data === 'success' || 
+                data.result === 'success' || 
+                data.status === 'success' || 
+                data.event === 'success' || 
+                data.action === 'success' || 
+                data.type === 'success' || 
+                data.message === 'success'
+            )) {
+                handleSelectionSuccess();
+            }
+        }
         window.addEventListener('message', onMessage);
+
+        // Multi-channel fallback polling (every 3 seconds)
+        pollInterval = setInterval(function () {
+            if (!popup || popup.closed) {
+                cleanup();
+                return;
+            }
+
+            // 1. Primary Poll Fallback: Check if the popup redirected back to our storefront domain
+            try {
+                var popupUrl = popup.location.href;
+                if (popupUrl && popupUrl.indexOf(window.location.hostname) !== -1) {
+                    console.log('[SkyPoint] Redirect back to storefront detected in popup. Fetching selection...');
+                    handleSelectionSuccess();
+                    return;
+                }
+            } catch (e) {
+                // Expected cross-origin error while on eocloudx.co.za
+            }
+
+            // 2. Secondary Poll Fallback: Poll backend to see if selection was written to SkyPoint's API
+            var checkUrl = backendUrl + '/api/pudo/selected/' + encodeURIComponent(guid) + '?shop=' + encodeURIComponent(shopDomain);
+            makeRequest('GET', checkUrl, null, function (err, json) {
+                if (!err && json && json.success && json.pudo_point) {
+                    console.log('[SkyPoint] Backend polling detected successful selection!');
+                    handleSelectionSuccess();
+                }
+            });
+        }, 3000);
     }
 
     // =========================================================================
     // SAVE / CLEAR
     // =========================================================================
     function savePudo(point) {
+        // Normalise field names — pcode/zip are synonyms
+        var zip = point.pcode || point.zip || '';
+        var normalised = {
+            code:     point.code     || '',
+            name:     point.name     || '',
+            addr1:    point.addr1    || '',
+            addr2:    point.addr2    || '',
+            city:     point.city     || '',
+            pcode:    zip,
+            zip:      zip,
+            provider: point.provider || ''
+        };
+
         var updateUrl = normalizedRoot + '/cart/update.js';
         var data = {
             attributes: {
-                pudo_code:     point.code     || '',
-                pudo_name:     point.name     || '',
-                pudo_addr1:    point.addr1    || '',
-                pudo_addr2:    point.addr2    || '',
-                pudo_city:     point.city     || '',
-                pudo_zip:      point.pcode    || '',
-                pudo_provider: point.provider || ''
+                pudo_code:     normalised.code,
+                pudo_name:     normalised.name,
+                pudo_addr1:    normalised.addr1,
+                pudo_addr2:    normalised.addr2,
+                pudo_city:     normalised.city,
+                pudo_zip:      normalised.zip,
+                pudo_provider: normalised.provider
             }
         };
 
-        makeRequest('POST', updateUrl, data, function (err, cart) {
+        // Update in-memory state immediately so checkout button works right away
+        currentPudo = normalised;
+        renderInlineWidget();
+        var fab = document.getElementById('sp-float');
+        if (fab) renderFloatingWidget(fab);
+
+        makeRequest('POST', updateUrl, data, function (err) {
             if (err) {
                 console.error('[SkyPoint] Failed to save cart attributes:', err);
-                alert('Failed to save PUDO selection. Please try again.');
-                return;
+                // Don't alert — the in-memory state is already set so checkout still works
+            } else {
+                console.log('[SkyPoint] Cart attributes saved successfully.');
             }
-            currentPudo = point;
-            renderInlineWidget();
-            var fab = document.getElementById('sp-float');
-            if (fab) renderFloatingWidget(fab);
-            console.log('[SkyPoint] Cart attributes saved.');
         });
     }
 

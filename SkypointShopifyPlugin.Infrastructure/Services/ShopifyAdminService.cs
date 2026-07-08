@@ -90,7 +90,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             try
             {
                 publicBaseUrl = publicBaseUrl.TrimEnd('/');
-                var desiredUrl = $"{publicBaseUrl}/js/skypoint-pudo.js?v=2";
+                var desiredUrl = $"{publicBaseUrl}/js/skypoint-pudo.js?v=10";
 
                 var existing = await GetScriptTagsAsync(shopDomain, accessToken);
                 var deleted = 0;
@@ -678,6 +678,146 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             {
                 _logger.LogError(ex, "Error updating tracking on Shopify via GraphQL for order {OrderId}", shopifyOrderId);
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Creates a Shopify checkout via the Storefront API with the shipping address pre-populated.
+        /// Returns the checkout webUrl, or null on failure.
+        /// </summary>
+        public async Task<string?> CreateCheckoutWithAddressAsync(
+            string shopDomain,
+            string accessToken,
+            string address1,
+            string address2,
+            string city,
+            string zip,
+            string countryCode,
+            string? firstName,
+            string? lastName,
+            IEnumerable<CheckoutLineItemDto> lineItems)
+        {
+            shopDomain = shopDomain.Replace("https://", "").Replace("http://", "").TrimEnd('/');
+
+            try
+            {
+                var storefrontToken = await GetOrCreateStorefrontTokenAsync(shopDomain, accessToken);
+                if (string.IsNullOrEmpty(storefrontToken))
+                {
+                    _logger.LogWarning("Could not obtain Storefront API token for shop {Shop}", shopDomain);
+                    return null;
+                }
+
+                var itemsString = "";
+                if (lineItems != null)
+                {
+                    var itemsList = new List<string>();
+                    foreach (var item in lineItems)
+                    {
+                        itemsList.Add($"{{ variantId: \"gid://shopify/ProductVariant/{item.VariantId}\", quantity: {item.Quantity} }}");
+                    }
+                    itemsString = "lineItems: [ " + string.Join(", ", itemsList) + " ]";
+                }
+
+                string Esc(string? s) => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+                var mutation = $@"mutation {{
+  checkoutCreate(input: {{
+    {itemsString}
+    shippingAddress: {{
+      firstName: ""{Esc(firstName ?? "PUDO")}""
+      lastName:  ""{Esc(lastName  ?? "Counter")}""
+      address1:  ""{Esc(address1)}""
+      address2:  ""{Esc(address2)}""
+      city:      ""{Esc(city)}""
+      zip:       ""{Esc(zip)}""
+      country:   ""{Esc(countryCode)}""
+    }}
+  }}) {{
+    checkout {{ id webUrl }}
+    checkoutUserErrors {{ code field message }}
+  }}
+}}";
+
+                var requestBody = JsonSerializer.Serialize(new { query = mutation });
+                var req = new HttpRequestMessage(HttpMethod.Post,
+                    $"https://{shopDomain}/api/2024-01/graphql.json")
+                {
+                    Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
+                };
+                req.Headers.Add("X-Shopify-Storefront-Access-Token", storefrontToken);
+
+                var resp = await _httpClient.SendAsync(req);
+                var body = await resp.Content.ReadAsStringAsync();
+                _logger.LogInformation("Storefront checkoutCreate for {Shop}: {Body}", shopDomain, body);
+
+                var json = JsonNode.Parse(body);
+                var webUrl = json?["data"]?["checkoutCreate"]?["checkout"]?["webUrl"]?.ToString();
+                if (!string.IsNullOrEmpty(webUrl))
+                {
+                    _logger.LogInformation("Created prefilled checkout for {Shop}: {Url}", shopDomain, webUrl);
+                    return webUrl;
+                }
+
+                var errs = json?["data"]?["checkoutCreate"]?["checkoutUserErrors"]?.AsArray();
+                if (errs != null && errs.Count > 0)
+                    _logger.LogWarning("checkoutCreate errors for {Shop}: {E}", shopDomain,
+                        string.Join(", ", errs.Select(e => e?["message"]?.ToString())));
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating checkout for shop {Shop}", shopDomain);
+                return null;
+            }
+        }
+
+        private async Task<string?> GetOrCreateStorefrontTokenAsync(string shopDomain, string accessToken)
+        {
+            try
+            {
+                // List existing tokens
+                var listReq = new HttpRequestMessage(HttpMethod.Get,
+                    $"https://{shopDomain}/admin/api/2024-01/storefront_access_tokens.json");
+                listReq.Headers.Add("X-Shopify-Access-Token", accessToken);
+                var listResp = await _httpClient.SendAsync(listReq);
+                var listBody = await listResp.Content.ReadAsStringAsync();
+                var listJson = JsonNode.Parse(listBody);
+
+                var tokens = listJson?["storefront_access_tokens"]?.AsArray();
+                if (tokens != null && tokens.Count > 0)
+                {
+                    var tok = tokens[0]?["access_token"]?.ToString();
+                    if (!string.IsNullOrEmpty(tok))
+                    {
+                        _logger.LogInformation("Reusing existing Storefront token for {Shop}", shopDomain);
+                        return tok;
+                    }
+                }
+
+                // Create new storefront token
+                var createBody = JsonSerializer.Serialize(new
+                {
+                    storefront_access_token = new { title = "SkyPoint PUDO Plugin" }
+                });
+                var createReq = new HttpRequestMessage(HttpMethod.Post,
+                    $"https://{shopDomain}/admin/api/2024-01/storefront_access_tokens.json")
+                {
+                    Content = new StringContent(createBody, Encoding.UTF8, "application/json")
+                };
+                createReq.Headers.Add("X-Shopify-Access-Token", accessToken);
+                var createResp = await _httpClient.SendAsync(createReq);
+                var createRespBody = await createResp.Content.ReadAsStringAsync();
+                var createJson = JsonNode.Parse(createRespBody);
+                var newToken = createJson?["storefront_access_token"]?["access_token"]?.ToString();
+                _logger.LogInformation("Created new Storefront token for {Shop}: {Ok}", shopDomain, !string.IsNullOrEmpty(newToken));
+                return newToken;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get/create Storefront API token for {Shop}", shopDomain);
+                return null;
             }
         }
     }

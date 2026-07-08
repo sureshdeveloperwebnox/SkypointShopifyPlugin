@@ -17,6 +17,8 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         private readonly SkypointApiSettings _apiSettings;
         private readonly IConfiguration _configuration;
         private readonly IConfigurationStore _configurationStore;
+        private readonly IShopifyAdminService _shopifyAdminService;
+        private readonly IShopTokenStore _shopTokenStore;
 
         public PudoController(
             ILogger<PudoController> logger,
@@ -24,7 +26,9 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             ISkypointTokenStore skypointTokenStore,
             IOptions<SkypointApiSettings> apiSettings,
             IConfiguration configuration,
-            IConfigurationStore configurationStore)
+            IConfigurationStore configurationStore,
+            IShopifyAdminService shopifyAdminService,
+            IShopTokenStore shopTokenStore)
         {
             _logger = logger;
             _skypointApiClient = skypointApiClient;
@@ -32,6 +36,8 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             _apiSettings = apiSettings.Value;
             _configuration = configuration;
             _configurationStore = configurationStore;
+            _shopifyAdminService = shopifyAdminService;
+            _shopTokenStore = shopTokenStore;
         }
 
         /// <summary>
@@ -50,6 +56,10 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             if (!string.IsNullOrEmpty(domain))
             {
                 callbackDomain = domain;
+            }
+            else if (!string.IsNullOrEmpty(shop))
+            {
+                callbackDomain = shop.StartsWith("http") ? shop : $"https://{shop}";
             }
             else
             {
@@ -106,6 +116,58 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 return StatusCode(500, new { error = "Internal server error", details = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Creates a Shopify checkout with the selected PUDO address pre-filled.
+        /// POST /api/pudo/checkout-url
+        /// Body: { shop, address1, address2, city, zip, country, first_name, last_name }
+        /// Returns: { success, checkout_url }
+        /// </summary>
+        [HttpPost("checkout-url")]
+        public async Task<IActionResult> CreateCheckoutUrl([FromBody] CreateCheckoutRequest req)
+        {
+            if (string.IsNullOrEmpty(req?.Shop))
+                return BadRequest(new { error = "shop is required" });
+
+            var accessToken = _shopTokenStore.GetToken(req.Shop);
+            if (string.IsNullOrEmpty(accessToken))
+                return BadRequest(new { error = "Shop not installed or token missing" });
+
+            var items = req.LineItems != null
+                ? req.LineItems.Select(i => new CheckoutLineItemDto(i.VariantId, i.Quantity))
+                : Array.Empty<CheckoutLineItemDto>();
+
+            var checkoutUrl = await _shopifyAdminService.CreateCheckoutWithAddressAsync(
+                shopDomain:  req.Shop,
+                accessToken: accessToken,
+                address1:    req.Address1 ?? "",
+                address2:    req.Address2 ?? "",
+                city:        req.City     ?? "",
+                zip:         req.Zip      ?? "",
+                countryCode: req.Country  ?? "ZA",
+                firstName:   req.FirstName,
+                lastName:    req.LastName,
+                lineItems:   items);
+
+            if (string.IsNullOrEmpty(checkoutUrl))
+                return StatusCode(500, new { error = "Failed to create checkout with address" });
+
+            return Ok(new { success = true, checkout_url = checkoutUrl });
+        }
+
+        public record CreateCheckoutRequest(
+            string? Shop,
+            string? Address1,
+            string? Address2,
+            string? City,
+            string? Zip,
+            string? Country,
+            string? FirstName,
+            string? LastName,
+            List<CheckoutLineItem>? LineItems);
+
+        public record CheckoutLineItem(long VariantId, int Quantity);
+
 
         private async Task<string?> GetOrRefreshTokenAsync(string? shopDomain)
         {
