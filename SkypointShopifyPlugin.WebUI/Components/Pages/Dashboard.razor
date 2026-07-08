@@ -29,39 +29,6 @@
         <!-- Top Row: Title & User Info -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
             <h1 style="font-size: 1.8rem; font-weight: 800; color: #0f172a; margin: 0;">Dashboard</h1>
-            
-            <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
-                <!-- Logged In Info -->
-                <span style="font-size: 0.9rem; color: #475569; display: flex; align-items: center; gap: 0.5rem;">
-                    <i class="fas fa-user-circle" style="color: #64748b; font-size: 1.1rem;"></i>
-                    You are logged in as 
-                    <span style="background-color: #006bb7; color: white; padding: 3px 10px; border-radius: 4px; font-weight: 700; font-size: 0.8rem;">Customer</span>
-                </span>
-
-                <!-- Toggle Switch -->
-                <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; font-weight: 600; color: #475569;">
-                    <span>Shipping for me</span>
-                    <label style="position: relative; display: inline-block; width: 42px; height: 22px; margin: 0;">
-                        <input type="checkbox" style="opacity: 0; width: 0; height: 0;" checked>
-                        <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ff1e27; border-radius: 34px; transition: .4s; display: block;"></span>
-                        <span style="position: absolute; content: ''; height: 16px; width: 16px; left: 23px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; display: block;"></span>
-                    </label>
-                    <span>Shipping for someone else</span>
-                </div>
-
-                <!-- Reset Button -->
-                <button @onclick="LoadOrders" class="btn-refresh" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.55rem 1.2rem; color: #334155; font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; transition: all 0.2s;" disabled="@isLoadingOrders">
-                    @if (isLoadingOrders)
-                    {
-                        <i class="fas fa-spinner fa-spin"></i>
-                    }
-                    else
-                    {
-                        <i class="fas fa-sync-alt"></i>
-                    }
-                    Reset Dashboard
-                </button>
-            </div>
         </div>
 
         <!-- Grid of Stats Cards -->
@@ -113,34 +80,15 @@
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #f59e0b;"><i class="fas fa-exclamation-triangle" style="margin-right: 5px;"></i> Error Waybill</div>
                 <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
             </div>
-
             <!-- Cancelled Waybill Card -->
             <div style="background: white; border-radius: 8px; padding: 1.2rem 1.5rem; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 4px solid #64748b;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b;"><i class="fas fa-ban" style="margin-right: 5px;"></i> Cancelled Waybill</div>
                 <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
             </div>
         </div>
-
-        <!-- Date Range Filter Card -->
-        <div style="background: white; border-radius: 8px; border: 1px solid #e2e8f0; padding: 1rem 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.02); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-                <span style="font-weight: 800; font-size: 0.85rem; color: #475569; letter-spacing: 0.5px; text-transform: uppercase;">Date Range</span>
-                <select @bind="dateRangeType" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; color: #334155; font-weight: 600; outline: none;">
-                    <option value="Created Date">Created Date</option>
-                    <option value="Delivery Date">Delivery Date</option>
-                </select>
-                <input type="text" placeholder="yyyy-MM-dd" @bind="startDateStr" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; color: #334155; width: 160px; outline: none;" />
-                <input type="text" placeholder="yyyy-MM-dd" @bind="endDateStr" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.9rem; color: #334155; width: 160px; outline: none;" />
-                <button @onclick="ApplyFilters" class="btn-skynet-green" style="margin-top: 0; width: auto; padding: 0.5rem 1.5rem; border-radius: 6px; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 0.4rem;">
-                    <i class="fas fa-check"></i> Apply
-                </button>
-            </div>
-        </div>
-
         <!-- Orders Title and Search Controls -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
             <h2 style="font-size: 1.6rem; font-weight: 800; color: #ff1e27; margin: 0;">Orders: @totalOrders</h2>
-
             <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                 <select @bind="searchField" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.55rem 1rem; font-size: 0.9rem; color: #334155; font-weight: 600; outline: none;">
                     <option value="Track No">Track No</option>
