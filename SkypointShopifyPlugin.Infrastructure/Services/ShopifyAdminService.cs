@@ -90,7 +90,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             try
             {
                 publicBaseUrl = publicBaseUrl.TrimEnd('/');
-                var desiredUrl = $"{publicBaseUrl}/js/skypoint-pudo.js?v=13";
+                var desiredUrl = $"{publicBaseUrl}/js/skypoint-pudo.js?v=14";
 
                 var existing = await GetScriptTagsAsync(shopDomain, accessToken);
                 var deleted = 0;

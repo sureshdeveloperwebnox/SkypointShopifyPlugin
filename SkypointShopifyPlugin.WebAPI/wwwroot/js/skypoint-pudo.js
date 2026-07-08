@@ -300,13 +300,27 @@
             return;
         }
 
-        // Create inline container and insert BEFORE checkout button
+        // Create inline container
         var container = document.createElement('div');
         container.id = 'sp-inline';
 
+        var targetInsert = btn;
         var parent = btn.parentElement;
         if (parent) {
-            parent.insertBefore(container, btn);
+            try {
+                var style = window.getComputedStyle(parent);
+                var isFlexOrGrid = style.display === 'flex' || style.display === 'inline-flex' || style.display === 'grid';
+                var isRow = isFlexOrGrid && (style.flexDirection === 'row' || style.flexDirection === 'row-reverse' || !style.flexDirection);
+                
+                if (isFlexOrGrid && isRow) {
+                    targetInsert = parent;
+                }
+            } catch (e) {}
+        }
+
+        var insertParent = targetInsert.parentElement;
+        if (insertParent) {
+            insertParent.insertBefore(container, targetInsert);
         } else {
             (document.body || document.documentElement).appendChild(container);
         }
@@ -755,6 +769,9 @@
             '  margin-bottom:12px !important;',
             '  color:#1e293b !important;',
             '  box-shadow:0 2px 12px rgba(0,0,0,0.08) !important;',
+            '  width:100% !important;',
+            '  max-width:100% !important;',
+            '  clear:both !important;',
             '}',
             '.sp-badge {',
             '  display:inline-block !important;',
