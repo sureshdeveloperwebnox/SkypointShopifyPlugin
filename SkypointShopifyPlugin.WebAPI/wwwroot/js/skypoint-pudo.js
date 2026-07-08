@@ -466,8 +466,7 @@
 
             var payload = {
                 Shop:      shop,
-                Address1:  pudo.addr1  || '',
-                Address2:  (pudo.name  || '') + (pudo.addr2 ? ', ' + pudo.addr2 : ''),
+                Address2:  pudo.addr2  || '',
                 City:      pudo.city   || '',
                 Zip:       pudo.pcode  || pudo.zip  || '',
                 Country:   'ZA',
