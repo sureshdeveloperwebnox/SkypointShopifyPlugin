@@ -90,7 +90,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             try
             {
                 publicBaseUrl = publicBaseUrl.TrimEnd('/');
-                var desiredUrl = $"{publicBaseUrl}/js/skypoint-pudo.js?v=10";
+                var desiredUrl = $"{publicBaseUrl}/js/skypoint-pudo.js?v=13";
 
                 var existing = await GetScriptTagsAsync(shopDomain, accessToken);
                 var deleted = 0;
@@ -695,80 +695,71 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             string countryCode,
             string? firstName,
             string? lastName,
-            IEnumerable<CheckoutLineItemDto> lineItems)
+            IEnumerable<CheckoutLineItemDto> lineItems,
+            string? pudoCode = null,
+            string? pudoName = null,
+            string? pudoProvider = null)
         {
             shopDomain = shopDomain.Replace("https://", "").Replace("http://", "").TrimEnd('/');
 
             try
             {
-                var storefrontToken = await GetOrCreateStorefrontTokenAsync(shopDomain, accessToken);
-                if (string.IsNullOrEmpty(storefrontToken))
+                if (lineItems == null || !lineItems.Any())
                 {
-                    _logger.LogWarning("Could not obtain Storefront API token for shop {Shop}", shopDomain);
-                    return null;
+                    _logger.LogWarning("No line items provided, returning default cart checkout URL for {Shop}", shopDomain);
+                    return $"https://{shopDomain}/cart/checkout";
                 }
 
-                var itemsString = "";
-                if (lineItems != null)
+                // Construct Cart Permalink: https://{shop}/cart/{variant_id}:{qty},{variant_id}:{qty}?checkout[shipping_address][address1]=...
+                var itemsPath = string.Join(",", lineItems.Select(item => $"{item.VariantId}:{item.Quantity}"));
+                
+                var queryParams = new List<string>
                 {
-                    var itemsList = new List<string>();
-                    foreach (var item in lineItems)
-                    {
-                        itemsList.Add($"{{ variantId: \"gid://shopify/ProductVariant/{item.VariantId}\", quantity: {item.Quantity} }}");
-                    }
-                    itemsString = "lineItems: [ " + string.Join(", ", itemsList) + " ]";
-                }
-
-                string Esc(string? s) => (s ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
-
-                var mutation = $@"mutation {{
-  checkoutCreate(input: {{
-    {itemsString}
-    shippingAddress: {{
-      firstName: ""{Esc(firstName ?? "PUDO")}""
-      lastName:  ""{Esc(lastName  ?? "Counter")}""
-      address1:  ""{Esc(address1)}""
-      address2:  ""{Esc(address2)}""
-      city:      ""{Esc(city)}""
-      zip:       ""{Esc(zip)}""
-      country:   ""{Esc(countryCode)}""
-    }}
-  }}) {{
-    checkout {{ id webUrl }}
-    checkoutUserErrors {{ code field message }}
-  }}
-}}";
-
-                var requestBody = JsonSerializer.Serialize(new { query = mutation });
-                var req = new HttpRequestMessage(HttpMethod.Post,
-                    $"https://{shopDomain}/api/2024-01/graphql.json")
-                {
-                    Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
+                    $"checkout[shipping_address][first_name]={Uri.EscapeDataString(firstName ?? "PUDO")}",
+                    $"checkout[shipping_address][last_name]={Uri.EscapeDataString(lastName ?? "Counter")}",
+                    $"checkout[shipping_address][address1]={Uri.EscapeDataString(address1)}",
+                    $"checkout[shipping_address][address2]={Uri.EscapeDataString(address2)}",
+                    $"checkout[shipping_address][city]={Uri.EscapeDataString(city)}",
+                    $"checkout[shipping_address][zip]={Uri.EscapeDataString(zip)}",
+                    $"checkout[shipping_address][country]={Uri.EscapeDataString(countryCode)}"
                 };
-                req.Headers.Add("X-Shopify-Storefront-Access-Token", storefrontToken);
 
-                var resp = await _httpClient.SendAsync(req);
-                var body = await resp.Content.ReadAsStringAsync();
-                _logger.LogInformation("Storefront checkoutCreate for {Shop}: {Body}", shopDomain, body);
-
-                var json = JsonNode.Parse(body);
-                var webUrl = json?["data"]?["checkoutCreate"]?["checkout"]?["webUrl"]?.ToString();
-                if (!string.IsNullOrEmpty(webUrl))
+                if (!string.IsNullOrEmpty(pudoCode))
                 {
-                    _logger.LogInformation("Created prefilled checkout for {Shop}: {Url}", shopDomain, webUrl);
-                    return webUrl;
+                    queryParams.Add($"attributes[pudo_code]={Uri.EscapeDataString(pudoCode)}");
+                }
+                if (!string.IsNullOrEmpty(pudoName))
+                {
+                    queryParams.Add($"attributes[pudo_name]={Uri.EscapeDataString(pudoName)}");
+                }
+                if (!string.IsNullOrEmpty(address1))
+                {
+                    queryParams.Add($"attributes[pudo_addr1]={Uri.EscapeDataString(address1)}");
+                }
+                if (!string.IsNullOrEmpty(address2))
+                {
+                    queryParams.Add($"attributes[pudo_addr2]={Uri.EscapeDataString(address2)}");
+                }
+                if (!string.IsNullOrEmpty(city))
+                {
+                    queryParams.Add($"attributes[pudo_city]={Uri.EscapeDataString(city)}");
+                }
+                if (!string.IsNullOrEmpty(zip))
+                {
+                    queryParams.Add($"attributes[pudo_zip]={Uri.EscapeDataString(zip)}");
+                }
+                if (!string.IsNullOrEmpty(pudoProvider))
+                {
+                    queryParams.Add($"attributes[pudo_provider]={Uri.EscapeDataString(pudoProvider)}");
                 }
 
-                var errs = json?["data"]?["checkoutCreate"]?["checkoutUserErrors"]?.AsArray();
-                if (errs != null && errs.Count > 0)
-                    _logger.LogWarning("checkoutCreate errors for {Shop}: {E}", shopDomain,
-                        string.Join(", ", errs.Select(e => e?["message"]?.ToString())));
-
-                return null;
+                var checkoutUrl = $"https://{shopDomain}/cart/{itemsPath}?{string.Join("&", queryParams)}";
+                _logger.LogInformation("Generated Cart Permalink URL for {Shop}: {Url}", shopDomain, checkoutUrl);
+                return checkoutUrl;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating checkout for shop {Shop}", shopDomain);
+                _logger.LogError(ex, "Error creating checkout URL for shop {Shop}", shopDomain);
                 return null;
             }
         }

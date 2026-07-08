@@ -24,7 +24,10 @@ namespace SkypointShopifyPlugin.Core.Interfaces
             string countryCode,
             string? firstName,
             string? lastName,
-            IEnumerable<CheckoutLineItemDto> lineItems);
+            IEnumerable<CheckoutLineItemDto> lineItems,
+            string? pudoCode = null,
+            string? pudoName = null,
+            string? pudoProvider = null);
     }
 }
 

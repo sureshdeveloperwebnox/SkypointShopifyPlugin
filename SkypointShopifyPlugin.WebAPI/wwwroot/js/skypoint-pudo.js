@@ -18,6 +18,12 @@
     if (window.SkypointPudoIntegrated) return;
     window.SkypointPudoIntegrated = true;
 
+    function log() {
+        if (window.console && window.console.log) {
+            window.console.log.apply(window.console, arguments);
+        }
+    }
+
     // =========================================================================
     // CONFIG
     // =========================================================================
@@ -87,29 +93,11 @@
 
     function updateDiag(msg) {
         var d = document.getElementById('sp-diag');
-        if (d) d.textContent = '🔵 SkyPoint: ' + msg;
+        if (d) d.textContent = '🔵 SkyNet Online: ' + msg;
     }
 
-    var globalXHR = null;
     function getNativeXHR() {
-        if (globalXHR) return globalXHR;
-        try {
-            var iframe = document.createElement('iframe');
-            iframe.style.display = 'none';
-            var parent = document.body || document.documentElement;
-            if (parent) {
-                parent.appendChild(iframe);
-                if (iframe.contentWindow && iframe.contentWindow.XMLHttpRequest) {
-                    globalXHR = iframe.contentWindow.XMLHttpRequest;
-                }
-            }
-        } catch (e) {
-            // ignore
-        }
-        if (!globalXHR) {
-            globalXHR = XMLHttpRequest;
-        }
-        return globalXHR;
+        return window.XMLHttpRequest || XMLHttpRequest;
     }
 
     // Generic, robust XHR request wrapper (bypasses any global fetch/XHR overrides/hooks from other apps)
@@ -401,6 +389,34 @@
 
         log('Creating prefilled checkout via backend for', pudo.name);
 
+        // Find checkout buttons to show loading state
+        var btns = document.querySelectorAll(
+            'button[name="checkout"], input[name="checkout"], ' +
+            'a[href*="/checkout"], button.cart__checkout-button, ' +
+            'button.cart-checkout-button, button.checkout-button'
+        );
+
+        btns.forEach(function (b) {
+            b._spOrigText = b.textContent || b.value || '';
+            b.disabled = true;
+            if (b.tagName === 'INPUT') {
+                b.value = 'Preparing checkout...';
+            } else {
+                b.textContent = 'Preparing checkout...';
+            }
+        });
+
+        function restoreButtons() {
+            btns.forEach(function (b) {
+                b.disabled = false;
+                if (b.tagName === 'INPUT') {
+                    b.value = b._spOrigText || 'Check out';
+                } else {
+                    b.textContent = b._spOrigText || 'Check out';
+                }
+            });
+        }
+
         var redirected = false;
         function doRedirect(url) {
             if (redirected) return;
@@ -411,6 +427,7 @@
         // Hard 4-second fallback — checkout ALWAYS works
         var timeoutHandle = setTimeout(function () {
             log('Backend timeout — falling back to normal checkout');
+            restoreButtons();
             doRedirect(fallbackUrl);
         }, 4000);
 
@@ -419,6 +436,7 @@
             if (err || !cart || !cart.items || cart.items.length === 0) {
                 log('Failed to fetch cart.js, falling back to standard checkout immediately:', err);
                 clearTimeout(timeoutHandle);
+                restoreButtons();
                 doRedirect(fallbackUrl);
                 return;
             }
@@ -441,7 +459,10 @@
                 Country:   'ZA',
                 FirstName: 'PUDO',
                 LastName:  pudo.name   || 'Counter',
-                LineItems: lineItems
+                LineItems: lineItems,
+                PudoCode:  pudo.code   || '',
+                PudoName:  pudo.name   || '',
+                PudoProvider: pudo.provider || 'skypoint'
             };
 
             makeRequest('POST', backendUrl + '/api/pudo/checkout-url', payload, function (err2, data) {
@@ -451,6 +472,7 @@
                     doRedirect(data.checkout_url);
                 } else {
                     log('Prefilled checkout failed (' + (err2 ? err2.message : 'no url') + '), using fallback');
+                    restoreButtons();
                     doRedirect(fallbackUrl);
                 }
             });

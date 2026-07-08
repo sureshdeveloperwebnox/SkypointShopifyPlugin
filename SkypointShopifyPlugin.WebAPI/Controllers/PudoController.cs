@@ -147,7 +147,10 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 countryCode: req.Country  ?? "ZA",
                 firstName:   req.FirstName,
                 lastName:    req.LastName,
-                lineItems:   items);
+                lineItems:   items,
+                pudoCode:    req.PudoCode,
+                pudoName:    req.PudoName,
+                pudoProvider: req.PudoProvider);
 
             if (string.IsNullOrEmpty(checkoutUrl))
                 return StatusCode(500, new { error = "Failed to create checkout with address" });
@@ -164,7 +167,10 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             string? Country,
             string? FirstName,
             string? LastName,
-            List<CheckoutLineItem>? LineItems);
+            List<CheckoutLineItem>? LineItems,
+            string? PudoCode = null,
+            string? PudoName = null,
+            string? PudoProvider = null);
 
         public record CheckoutLineItem(long VariantId, int Quantity);
 
