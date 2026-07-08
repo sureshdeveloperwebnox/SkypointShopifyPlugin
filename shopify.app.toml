@@ -3,7 +3,7 @@
 client_id = "43cc9e72087b61c72649cbabcd052072"
 name = "Skypoint Shipping"
 handle = "skypoint-shipping"
-application_url = "https://7dca-223-185-24-22.ngrok-free.app"
+application_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev"
 embedded = false
 
 [build]
@@ -14,7 +14,7 @@ scopes = "read_orders,write_orders,read_products,write_products,read_shipping,wr
 
 [auth]
 redirect_urls = [
-  "https://7dca-223-185-24-22.ngrok-free.app/api/shopify/auth"
+  "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/auth"
 ]
 
 [webhooks]

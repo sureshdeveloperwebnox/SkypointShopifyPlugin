@@ -53,6 +53,24 @@
     var isCheckoutPage = path.indexOf('/checkouts') !== -1 || path.indexOf('/checkout') !== -1;
 
     var currentPudo = null;
+    var inlineInjected = false;
+
+    var BTN_SELECTORS = [
+        'button[name="checkout"]',
+        'input[name="checkout"]',
+        '#checkout',
+        '.cart__checkout-button',
+        '.checkout-button',
+        'a.cart__checkout',
+        'button.cart__checkout',
+        'a[href="/checkout"]',
+        'a[href*="/checkout"]',
+        'a[href*="/checkouts"]',
+        '[data-action="checkout"]',
+        '.cart-checkout-button',
+        '.btn--full.cart__submit',
+        '[data-testid="Checkout-button"]'
+    ];
 
     console.log('[SkyPoint] Script loaded. path=' + path + ' isCart=' + isCartPage + ' backend=' + backendUrl);
 
@@ -76,6 +94,12 @@
     function makeRequest(method, url, data, callback) {
         var xhr = new XMLHttpRequest();
         xhr.open(method, url, true);
+        
+        // Bypass ngrok warning page during development (only for absolute backend URLs)
+        if (url && url.indexOf('http') === 0) {
+            xhr.setRequestHeader('ngrok-skip-browser-warning', '69420');
+        }
+
         if (data) {
             xhr.setRequestHeader('Content-Type', 'application/json');
         }
@@ -103,33 +127,43 @@
     // FETCH CART STATE THEN BOOT
     // =========================================================================
     domReady(function () {
-        updateDiag('DOM ready. Booting UI immediately...');
-        
-        // Boot UI immediately so it is functional and not blocked by cart fetch latency
-        boot();
+        try {
+            updateDiag('DOM ready. Booting UI immediately...');
+            
+            // Boot UI immediately so it is functional and not blocked by cart fetch latency
+            boot();
 
-        updateDiag('Fetching cart state...');
-        makeRequest('GET', normalizedRoot + '/cart.js', null, function (err, cart) {
-            if (err) {
-                updateDiag('Cart fetch optional step: ' + err.message);
-                return;
-            }
-            updateDiag('Cart fetch OK.');
-            if (cart && cart.attributes && cart.attributes.pudo_code) {
-                currentPudo = {
-                    code:     cart.attributes.pudo_code     || '',
-                    name:     cart.attributes.pudo_name     || '',
-                    addr1:    cart.attributes.pudo_addr1    || '',
-                    addr2:    cart.attributes.pudo_addr2    || '',
-                    city:     cart.attributes.pudo_city     || '',
-                    pcode:    cart.attributes.pudo_zip      || '',
-                    provider: cart.attributes.pudo_provider || ''
-                };
-                renderInlineWidget();
-                var fab = document.getElementById('sp-float');
-                if (fab) renderFloatingWidget(fab);
-            }
-        });
+            updateDiag('Fetching cart state...');
+            makeRequest('GET', normalizedRoot + '/cart.js', null, function (err, cart) {
+                try {
+                    if (err) {
+                        updateDiag('Cart fetch optional step: ' + err.message);
+                        return;
+                    }
+                    updateDiag('Cart fetch OK.');
+                    if (cart && cart.attributes && cart.attributes.pudo_code) {
+                        currentPudo = {
+                            code:     cart.attributes.pudo_code     || '',
+                            name:     cart.attributes.pudo_name     || '',
+                            addr1:    cart.attributes.pudo_addr1    || '',
+                            addr2:    cart.attributes.pudo_addr2    || '',
+                            city:     cart.attributes.pudo_city     || '',
+                            pcode:    cart.attributes.pcode         || cart.attributes.pudo_zip || '',
+                            provider: cart.attributes.pudo_provider || ''
+                        };
+                        renderInlineWidget();
+                        var fab = document.getElementById('sp-float');
+                        if (fab) renderFloatingWidget(fab);
+                    }
+                } catch (eInner) {
+                    console.error('[SkyPoint] Inner error in cart callback:', eInner);
+                    updateDiag('Cart callback error: ' + eInner.message);
+                }
+            });
+        } catch (eBoot) {
+            console.error('[SkyPoint] Boot error:', eBoot);
+            updateDiag('Boot error: ' + eBoot.message);
+        }
     });
 
     function boot() {
@@ -152,7 +186,7 @@
         if (!fab) {
             fab = document.createElement('div');
             fab.id = 'sp-float';
-            document.body.appendChild(fab);
+            (document.body || document.documentElement).appendChild(fab);
         }
         renderFloatingWidget(fab);
     }
@@ -204,22 +238,7 @@
     // INLINE WIDGET — tries to place widget above the checkout button
     // This is a nice-to-have. The float widget is the primary UX.
     // =========================================================================
-    var BTN_SELECTORS = [
-        'button[name="checkout"]',
-        'input[name="checkout"]',
-        '#checkout',
-        '.cart__checkout-button',
-        '.checkout-button',
-        'a.cart__checkout',
-        'button.cart__checkout',
-        'a[href="/checkout"]',
-        'a[href*="/checkout"]',
-        'a[href*="/checkouts"]',
-        '[data-action="checkout"]',
-        '.cart-checkout-button',
-        '.btn--full.cart__submit',
-        '[data-testid="Checkout-button"]'
-    ];
+
 
     function isVisible(el) {
         try {
@@ -254,7 +273,7 @@
         return null;
     }
 
-    var inlineInjected = false;
+
 
     function tryInlineInject() {
         if (inlineInjected && document.getElementById('sp-inline')) return;
@@ -277,7 +296,7 @@
         if (parent) {
             parent.insertBefore(container, btn);
         } else {
-            document.body.appendChild(container);
+            (document.body || document.documentElement).appendChild(container);
         }
 
         inlineInjected = true;
@@ -304,7 +323,8 @@
                     '<button type="button" class="sp-btn-clear" id="sp-inline-clear">Clear</button>' +
                   '</div>' +
                 '</div>';
-            document.getElementById('sp-inline-clear').onclick = clearPudo;
+            var clearBtn = document.getElementById('sp-inline-clear');
+            if (clearBtn) clearBtn.onclick = clearPudo;
         } else {
             c.innerHTML =
                 '<div style="font-weight:700;font-size:14px;color:#1e293b;margin-bottom:4px;">📦 Collect from a PUDO Counter?</div>' +
@@ -312,7 +332,8 @@
                 '<button type="button" class="sp-btn" id="sp-inline-select">🗺️ Select PUDO Counter</button>';
         }
 
-        document.getElementById('sp-inline-select').onclick = launchSelector;
+        var selectBtn = document.getElementById('sp-inline-select');
+        if (selectBtn) selectBtn.onclick = launchSelector;
     }
 
     // Poll to inject inline widget
@@ -348,13 +369,27 @@
                 for (var k = 0; k < BTN_SELECTORS.length; k++) {
                     try {
                         if (target.matches && target.matches(BTN_SELECTORS[k])) {
+                            e.preventDefault();
+                            e.stopImmediatePropagation();
+
                             if (!currentPudo) {
-                                e.preventDefault();
-                                e.stopImmediatePropagation();
                                 pulseFloat();
                                 showBlockedToast();
                                 return;
                             }
+
+                            // Redirect to checkout with prefilled PUDO address parameters
+                            var checkoutUrl = rootPath + 'checkout'
+                                + '?checkout[shipping_address][company]='  + encodeURIComponent(currentPudo.name + ' (' + currentPudo.code + ')')
+                                + '&checkout[shipping_address][address1]=' + encodeURIComponent(currentPudo.addr1)
+                                + '&checkout[shipping_address][address2]=' + encodeURIComponent(currentPudo.addr2 || '')
+                                + '&checkout[shipping_address][city]='     + encodeURIComponent(currentPudo.city)
+                                + '&checkout[shipping_address][zip]='      + encodeURIComponent(currentPudo.pcode)
+                                + '&checkout[shipping_address][country]='  + encodeURIComponent('South Africa');
+                            
+                            console.log('[SkyPoint] Redirecting to checkout with PUDO address:', checkoutUrl);
+                            window.location.href = checkoutUrl;
+                            return;
                         }
                     } catch (e2) {}
                 }
@@ -365,11 +400,28 @@
         document.addEventListener('submit', function (e) {
             var form = e.target;
             if (form && form.action &&
-                (form.action.indexOf('/cart') !== -1 || form.action.indexOf('/checkout') !== -1) &&
-                !currentPudo) {
+                (form.action.indexOf('/cart') !== -1 || form.action.indexOf('/checkout') !== -1)) {
+                
                 e.preventDefault();
-                pulseFloat();
-                showBlockedToast();
+                e.stopImmediatePropagation();
+
+                if (!currentPudo) {
+                    pulseFloat();
+                    showBlockedToast();
+                    return;
+                }
+
+                // Redirect to checkout with prefilled PUDO address parameters
+                var checkoutUrl = rootPath + 'checkout'
+                    + '?checkout[shipping_address][company]='  + encodeURIComponent(currentPudo.name + ' (' + currentPudo.code + ')')
+                    + '&checkout[shipping_address][address1]=' + encodeURIComponent(currentPudo.addr1)
+                    + '&checkout[shipping_address][address2]=' + encodeURIComponent(currentPudo.addr2 || '')
+                    + '&checkout[shipping_address][city]='     + encodeURIComponent(currentPudo.city)
+                    + '&checkout[shipping_address][zip]='      + encodeURIComponent(currentPudo.pcode)
+                    + '&checkout[shipping_address][country]='  + encodeURIComponent('South Africa');
+                
+                console.log('[SkyPoint] Redirecting to checkout with PUDO address:', checkoutUrl);
+                window.location.href = checkoutUrl;
             }
         }, true);
 
@@ -528,7 +580,7 @@
         var apiUrl = backendUrl + '/api/pudo/widget-url'
             + '?shop='    + encodeURIComponent(shopDomain)
             + '&address=' + encodeURIComponent('South Africa')
-            + '&domain='  + encodeURIComponent(backendUrl);
+            + '&domain='  + encodeURIComponent(window.location.origin);
 
         console.log('[SkyPoint] Fetching widget URL from:', apiUrl);
 
