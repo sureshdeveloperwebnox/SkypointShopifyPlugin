@@ -45,15 +45,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 pickupPCode = MapPostalCode(pickupPCode, fromSuburb, configuration);
                 fromSuburb = MapSuburb(fromSuburb, pickupPCode, configuration);
                 
-                if (string.IsNullOrEmpty(order.ToCounterCode))
-                {
-                    dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
-                    toSuburb = MapSuburb(toSuburb, dropOffPCode, configuration);
-                }
-                else
-                {
-                    dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
-                }
+                dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
+                toSuburb = MapSuburb(toSuburb, dropOffPCode, configuration);
             }
 
             return new BookingRequest
@@ -175,7 +168,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
             var fromSuburb = MapSuburb(FirstNonEmpty(billingAddress?.city, " "), pickupPCode, configuration);
             var toSuburb = isDtc
-                ? FirstNonEmpty(pudoCity, shippingAddress?.city, " ")
+                ? MapSuburb(FirstNonEmpty(pudoCity, shippingAddress?.city, " "), dropOffPCode, configuration)
                 : MapSuburb(FirstNonEmpty(shippingAddress?.city, " "), dropOffPCode, configuration);
 
             return new BookingRequest
