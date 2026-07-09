@@ -11,6 +11,7 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         Task<TrackingResponse> TrackBookingAsync(string trackNo, string authToken);
         Task<PudoPointResponse> GetSelectedPudoPointAsync(string guid, string authToken);
         Task<WaybillDownloadResponse> DownloadWaybillAsync(string waybillNumber, string authToken);
+        Task<WaybillDownloadResponse> BulkLabelPrintAsync(List<string> bookingIds, string authToken);
         Task<BookingResponse> GetBookingDetailsAsync(string bookingId, string authToken);
         Task<BookingResponse> ProcessBookingAsync(string trackNo, string authToken);
     }

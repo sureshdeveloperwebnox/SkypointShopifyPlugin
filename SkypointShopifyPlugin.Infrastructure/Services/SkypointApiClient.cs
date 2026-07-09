@@ -267,6 +267,35 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
+        public async Task<WaybillDownloadResponse> BulkLabelPrintAsync(List<string> bookingIds, string authToken)
+        {
+            var url = _settings.GetBulkLabelPrintUrl();
+            _logger.LogInformation("Bulk label print request to {Url} for {Count} bookings", url, bookingIds.Count);
+
+            return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
+            {
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
+                httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
+                httpRequest.Content = new StringContent(
+                    JsonSerializer.Serialize(bookingIds, _jsonOptions),
+                    System.Text.Encoding.UTF8,
+                    "application/json");
+
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Bulk label print API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                    throw new HttpRequestException($"Skypoint bulk label API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
+                }
+
+                var result = JsonSerializer.Deserialize<WaybillDownloadResponse>(responseBody, _jsonOptions);
+                _logger.LogInformation("Bulk label print succeeded. File: {FileName}", result?.FileName);
+                return result!;
+            });
+        }
+
         public async Task<BookingResponse> GetBookingDetailsAsync(string bookingId, string authToken)
         {
             if (string.IsNullOrEmpty(bookingId) || !Guid.TryParse(bookingId, out _))

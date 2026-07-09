@@ -7,8 +7,6 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
 {
     /// <summary>
     /// Controller for Skypoint order management
-    /// Provides endpoints for creating, processing, and managing Skypoint orders
-    /// Mirrors the Shopify order management pattern
     /// </summary>
     [ApiController]
     [Route("api/skypoint/orders")]
@@ -17,13 +15,19 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
     {
         private readonly ILogger<SkypointOrderController> _logger;
         private readonly ISkypointOrderService _orderService;
+        private readonly ISkypointApiClient _skypointApiClient;
+        private readonly ISkypointTokenStore _skypointTokenStore;
 
         public SkypointOrderController(
             ILogger<SkypointOrderController> logger,
-            ISkypointOrderService orderService)
+            ISkypointOrderService orderService,
+            ISkypointApiClient skypointApiClient,
+            ISkypointTokenStore skypointTokenStore)
         {
             _logger = logger;
             _orderService = orderService;
+            _skypointApiClient = skypointApiClient;
+            _skypointTokenStore = skypointTokenStore;
         }
 
         /// <summary>
@@ -282,6 +286,90 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             {
                 _logger.LogError(ex, "Error downloading waybill for order {OrderId}", orderId);
                 return StatusCode(500, new { success = false, message = "An error occurred while downloading the waybill" });
+            }
+        }
+        /// <summary>
+        /// Proxy bulk label print request to Skypoint API
+        /// POST /api/skypoint/orders/bulk/label
+        /// </summary>
+        [HttpPost("bulk/label")]
+        public async Task<IActionResult> BulkLabelPrint([FromBody] List<string> bookingIds)
+        {
+            if (bookingIds == null || bookingIds.Count == 0)
+                return BadRequest(new { success = false, message = "No booking IDs provided." });
+
+            _logger.LogInformation("Bulk label print requested for {Count} booking(s)", bookingIds.Count);
+
+            try
+            {
+                string? skypointToken = null;
+
+                // 1. Try skypoint_token embedded in JWT claim (set at login)
+                var jwtSkypointToken = User.FindFirst("skypoint_token")?.Value;
+                if (!string.IsNullOrEmpty(jwtSkypointToken))
+                {
+                    skypointToken = jwtSkypointToken;
+                    _logger.LogInformation("Using Skypoint token from JWT claim for bulk label");
+                }
+
+                // 2. Try X-Skypoint-Token header (forwarded directly from the UI session)
+                if (string.IsNullOrEmpty(skypointToken))
+                {
+                    var headerToken = Request.Headers["X-Skypoint-Token"].FirstOrDefault();
+                    if (!string.IsNullOrEmpty(headerToken))
+                    {
+                        skypointToken = headerToken;
+                        _logger.LogInformation("Using Skypoint token from X-Skypoint-Token header for bulk label");
+                    }
+                }
+
+                // 3. Fall back to token store keyed by shop claim in JWT
+                if (string.IsNullOrEmpty(skypointToken))
+                {
+                    var shopClaim = User.FindFirst("shop")?.Value;
+                    var vid = !string.IsNullOrEmpty(shopClaim) ? shopClaim : "default";
+
+                    skypointToken = _skypointTokenStore.GetToken(vid);
+
+                    // 4. If still missing, try re-auth using stored credentials
+                    if (string.IsNullOrEmpty(skypointToken))
+                    {
+                        var creds = _skypointTokenStore.GetCredentials(vid);
+                        if (creds != null)
+                        {
+                            var loginResp = await _skypointApiClient.LoginAsync(new Core.DTOs.Skypoint.LoginRequest
+                            {
+                                Username = creds.Value.username,
+                                Pwd      = creds.Value.password
+                            });
+                            if (loginResp?.Token?.TokenValue != null)
+                            {
+                                _skypointTokenStore.SaveToken(vid, loginResp.Token.TokenValue, loginResp.Token.Expiration, loginResp.Id);
+                                skypointToken = loginResp.Token.TokenValue;
+                            }
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(skypointToken))
+                    return Unauthorized(new { success = false, message = "No Skypoint token available. Please log in again." });
+
+                var result = await _skypointApiClient.BulkLabelPrintAsync(bookingIds, skypointToken);
+
+                if (result == null || string.IsNullOrEmpty(result.FileStream))
+                    return NotFound(new { success = false, message = "Bulk label print returned no file data." });
+
+                return Ok(result);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Bulk label print API call failed");
+                return StatusCode(502, new { success = false, message = $"Skypoint API error: {ex.Message}" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error during bulk label print");
+                return StatusCode(500, new { success = false, message = "An unexpected error occurred." });
             }
         }
     }
