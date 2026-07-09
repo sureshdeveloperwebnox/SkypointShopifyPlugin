@@ -211,6 +211,12 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
                 var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
 
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    _logger.LogInformation("Selected PUDO point for GUID {Guid} not selected yet (404).", guid);
+                    return null!;
+                }
+
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogError("Selected PUDO Point API returned {Status}: {Body}", (int)response.StatusCode, responseBody);

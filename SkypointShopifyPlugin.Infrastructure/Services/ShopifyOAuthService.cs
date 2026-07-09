@@ -34,10 +34,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             return installUrl;
         }
 
-        public async Task<string> ExchangeCodeForAccessTokenAsync(string shop, string code)
+        public async Task<ShopifyTokenResponse> ExchangeCodeForAccessTokenAsync(string shop, string code)
         {
             var tokenUrl = $"https://{shop}/admin/oauth/access_token";
-            var requestBody = new { client_id = _settings.ClientId, client_secret = _settings.ClientSecret, code = code };
+            var requestBody = new { client_id = _settings.ClientId, client_secret = _settings.ClientSecret, code = code, expiring = 1 };
             var content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync(tokenUrl, content);
             var responseBody = await response.Content.ReadAsStringAsync();
@@ -47,7 +47,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             if (tokenResponse?.access_token == null)
                 throw new Exception($"No access_token in response: {responseBody}");
             _logger.LogInformation("Access token obtained for shop: {Shop}", shop);
-            return tokenResponse.access_token;
+            return tokenResponse;
         }
 
         public async Task<string?> GetTokenViaClientCredentialsAsync(string shop)

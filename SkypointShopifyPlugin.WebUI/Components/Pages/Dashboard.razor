@@ -22,6 +22,10 @@
             
             <div class="msg" style="display: block; background: @bgColor; border: 1px solid @borderColor; color: @textColor; padding: 12px 18px; border-radius: 6px; margin-bottom: 2rem; position: relative;">
                 <strong>@(isSuccess ? "✓ Status: " : "✗ Alert: ")</strong> @carrierMessage
+                @if (reinstallRequired && !string.IsNullOrEmpty(reinstallUrl))
+                {
+                    <a href="@reinstallUrl" style="background-color: #ef4444; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 0.8rem; margin-left: 10px; display: inline-block;">Reconnect Shopify</a>
+                }
                 <button type="button" @onclick="() => carrierMessage = null" style="position: absolute; right: 15px; top: 12px; background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: @textColor; line-height: 1;">&times;</button>
             </div>
         }
@@ -30,6 +34,20 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
             <h1 style="font-size: 1.8rem; font-weight: 800; color: #0f172a; margin: 0;">Dashboard</h1>
         </div>
+
+        @if (!string.IsNullOrEmpty(Shop))
+        {
+            var checkoutEditorUrl = $"https://admin.shopify.com/store/{Shop.Replace(".myshopify.com", "")}/settings/checkout/editor";
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-left: 4px solid #006bb7; box-shadow: 0 4px 12px rgba(0,0,0,0.015);">
+                <div>
+                    <h4 style="margin: 0 0 4px 0; color: #0f172a; font-weight: 800; font-size: 0.95rem;"><i class="fas fa-cog" style="color: #006bb7; margin-right: 5px;"></i> Shopify Checkout PUDO Selector</h4>
+                    <p style="margin: 0; font-size: 0.85rem; color: #64748b;">If you are on Shopify Plus, you can enable and position the PUDO selector directly inside your checkout pages.</p>
+                </div>
+                <a href="@checkoutEditorUrl" target="_blank" style="background: #006bb7; color: white; padding: 0.55rem 1.25rem; font-size: 0.85rem; font-weight: bold; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; transition: background 0.2s; border: none; box-shadow: 0 2px 6px rgba(0, 107, 183, 0.15);">
+                    <i class="fas fa-external-link-alt"></i> Configure Checkout Page
+                </a>
+            </div>
+        }
 
         <!-- Grid of Stats Cards -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;">

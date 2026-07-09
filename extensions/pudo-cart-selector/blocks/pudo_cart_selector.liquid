@@ -1,0 +1,274 @@
+<div class="pudo-cart-selector" id="pudo-cart-selector">
+  <div class="pudo-header">
+    <h3>📦 Collect from a PUDO Counter?</h3>
+    <p>Select a nearby PUDO point for pickup instead of home delivery.</p>
+  </div>
+  
+  <div class="pudo-content">
+    <div id="pudo-selected-info" style="display: none;">
+      <div class="pudo-selected">
+        <span class="pudo-check">✓</span>
+        <div class="pudo-details">
+          <strong id="pudo-name"></strong>
+          <p id="pudo-address"></p>
+        </div>
+        <button type="button" class="pudo-change-btn" onclick="openPudoWidget()">Change</button>
+      </div>
+    </div>
+    
+    <div id="pudo-selector-button">
+      <button type="button" class="pudo-select-btn" onclick="openPudoWidget()">
+        🔍 Select PUDO Counter
+      </button>
+    </div>
+    
+    <div id="pudo-loading" style="display: none;">
+      <p>Loading PUDO selector...</p>
+    </div>
+  </div>
+</div>
+
+<style>
+  .pudo-cart-selector {
+    margin: 20px 0;
+    padding: 20px;
+    border: 2px dashed #e0e0e0;
+    border-radius: 8px;
+    background: #f9f9f9;
+  }
+  
+  .pudo-header h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 18px;
+  }
+  
+  .pudo-header p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+  }
+  
+  .pudo-select-btn {
+    background: #000;
+    color: #fff;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.3s;
+  }
+  
+  .pudo-select-btn:hover {
+    background: #333;
+  }
+  
+  .pudo-selected {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    background: #e8f5e9;
+    border-radius: 4px;
+    border: 1px solid #c8e6c9;
+  }
+  
+  .pudo-check {
+    color: #4caf50;
+    font-size: 20px;
+    font-weight: bold;
+  }
+  
+  .pudo-details {
+    flex: 1;
+  }
+  
+  .pudo-details strong {
+    display: block;
+    color: #333;
+    margin-bottom: 4px;
+  }
+  
+  .pudo-details p {
+    margin: 0;
+    color: #666;
+    font-size: 13px;
+  }
+  
+  .pudo-change-btn {
+    background: #fff;
+    color: #333;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  
+  .pudo-change-btn:hover {
+    background: #f5f5f5;
+  }
+  
+  #pudo-loading p {
+    color: #666;
+    font-style: italic;
+  }
+</style>
+
+<script>
+  const PUDO_API_BASE = 'https://eboni-unprizable-discriminatingly.ngrok-free.dev';
+  let pudoWidgetUrl = '';
+  let pudoGuid = '';
+  let pollingInterval = null;
+  
+  // Get shop domain from cart attributes or current page
+  function getShopDomain() {
+    return '{{ shop.domain }}';
+  }
+  
+  function openPudoWidget() {
+    if (!pudoWidgetUrl) {
+      loadPudoWidgetUrl().then(() => {
+        if (pudoWidgetUrl) {
+          window.open(pudoWidgetUrl, '_blank');
+          startPolling();
+        }
+      });
+    } else {
+      window.open(pudoWidgetUrl, '_blank');
+      startPolling();
+    }
+  }
+  
+  async function loadPudoWidgetUrl() {
+    const shopDomain = getShopDomain();
+    const loadingEl = document.getElementById('pudo-loading');
+    const buttonEl = document.getElementById('pudo-selector-button');
+    
+    try {
+      loadingEl.style.display = 'block';
+      buttonEl.style.display = 'none';
+      
+      const response = await fetch(`${PUDO_API_BASE}/api/pudo/widget-url?shop=${shopDomain}&address=South+Africa`, {
+        headers: { 'ngrok-skip-browser-warning': '69420' }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        pudoWidgetUrl = data.widget_url;
+        pudoGuid = data.guid;
+      }
+    } catch (error) {
+      console.error('Failed to load PUDO widget URL:', error);
+    } finally {
+      loadingEl.style.display = 'none';
+      buttonEl.style.display = 'block';
+    }
+  }
+  
+  function startPolling() {
+    if (pollingInterval || !pudoGuid) return;
+    
+    pollingInterval = setInterval(async () => {
+      try {
+        const shopDomain = getShopDomain();
+        const response = await fetch(`${PUDO_API_BASE}/api/pudo/selected/${pudoGuid}?shop=${shopDomain}`, {
+          headers: { 'ngrok-skip-browser-warning': '69420' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.pudo_point) {
+          clearInterval(pollingInterval);
+          pollingInterval = null;
+          
+          const pudo = data.pudo_point;
+          displaySelectedPudo(pudo);
+          
+          // Update cart attribute with PUDO selection
+          updateCartAttribute(pudo);
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 3000);
+  }
+  
+  function displaySelectedPudo(pudo) {
+    const selectedInfo = document.getElementById('pudo-selected-info');
+    const buttonEl = document.getElementById('pudo-selector-button');
+    
+    document.getElementById('pudo-name').textContent = pudo.name;
+    document.getElementById('pudo-address').textContent = `${pudo.addr1}, ${pudo.city}, ${pudo.pcode || pudo.zip}`;
+    
+    selectedInfo.style.display = 'block';
+    buttonEl.style.display = 'none';
+  }
+  
+  function updateCartAttribute(pudo) {
+    // Store PUDO selection in cart attributes
+    const pudoData = JSON.stringify({
+      name: pudo.name,
+      address1: pudo.addr1,
+      address2: pudo.addr2 || '',
+      city: pudo.city,
+      zip: pudo.pcode || pudo.zip,
+      countryCode: 'ZA'
+    });
+    
+    // Try to update cart note or attributes
+    fetch('/cart/update.js', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        note: `PUDO Point: ${pudo.name} - ${pudo.addr1}, ${pudo.city}`,
+        attributes: {
+          'pudo_point': pudoData,
+          'pudo_point_name': pudo.name,
+          'pudo_point_address': `${pudo.addr1}, ${pudo.city}`
+        }
+      })
+    }).catch(error => {
+      console.error('Failed to update cart attributes:', error);
+    });
+  }
+  
+  // Check for existing PUDO selection on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    const cartAttributes = {{ cart.attributes | json }};
+    if (cartAttributes && cartAttributes.pudo_point) {
+      try {
+        const pudo = JSON.parse(cartAttributes.pudo_point);
+        displaySelectedPudo(pudo);
+      } catch (error) {
+        console.error('Failed to parse PUDO selection:', error);
+      }
+    }
+  });
+</script>
+
+{% schema %}
+{
+  "name": "PUDO Cart Selector",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Title",
+      "default": "Collect from a PUDO Counter?"
+    },
+    {
+      "type": "textarea",
+      "id": "description",
+      "label": "Description",
+      "default": "Select a nearby PUDO point for pickup instead of home delivery."
+    }
+  ]
+}
+{% endschema %}

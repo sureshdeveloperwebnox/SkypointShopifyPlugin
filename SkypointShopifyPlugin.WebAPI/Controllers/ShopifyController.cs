@@ -140,12 +140,14 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 }
 
                 // Exchange code for access token
-                var accessToken = await _oauthService.ExchangeCodeForAccessTokenAsync(shop, code);
-                if (string.IsNullOrEmpty(accessToken))
+                var tokenResponse = await _oauthService.ExchangeCodeForAccessTokenAsync(shop, code);
+                if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.access_token))
                     return StatusCode(500, new { error = "Failed to obtain access token" });
 
+                var accessToken = tokenResponse.access_token;
+
                 // Persist token immediately — in-memory cache
-                _shopTokenStore.SaveToken(shop, accessToken);
+                _shopTokenStore.SaveToken(shop, accessToken, tokenResponse.refresh_token, tokenResponse.expires_in);
 
                 // Register carrier service and webhooks in background — don't block the redirect.
                 // Build carrier URL from the public ngrok/production base URL.

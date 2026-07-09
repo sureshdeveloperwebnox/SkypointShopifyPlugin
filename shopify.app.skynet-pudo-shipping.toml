@@ -1,0 +1,19 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "6c24a5e024e3fdb0aa058edc91cf4c50"
+name = "skynet-pudo-shipping"
+application_url = "https://shopify.dev/apps/default-app-home"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-10"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_fulfillments,read_merchant_managed_fulfillment_orders,read_orders,read_products,read_script_tags,read_shipping,write_fulfillments,write_merchant_managed_fulfillment_orders,write_orders,write_products,write_script_tags,write_shipping"
+
+[auth]
+redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]

@@ -61,10 +61,16 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/js"))
     {
-        var backendUrl = builder.Configuration["BackendApi:BaseUrl"] ?? "http://localhost:5126";
+        var backendUrl = builder.Configuration["BackendApi:BaseUrl"];
+        if (string.IsNullOrEmpty(backendUrl)) backendUrl = "http://localhost:5126";
         var targetUri = new Uri($"{backendUrl.TrimEnd('/')}{context.Request.Path}{context.Request.QueryString}");
 
-        using var jsClient = new HttpClient();
+        using var jsHandler = new HttpClientHandler 
+        { 
+            AllowAutoRedirect = false,
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
+        using var jsClient = new HttpClient(jsHandler);
         try
         {
             var jsResponse = await jsClient.GetAsync(targetUri);
@@ -89,10 +95,16 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/api"))
     {
-        var backendUrl = builder.Configuration["BackendApi:BaseUrl"] ?? "http://localhost:5126";
+        var backendUrl = builder.Configuration["BackendApi:BaseUrl"];
+        if (string.IsNullOrEmpty(backendUrl)) backendUrl = "http://localhost:5126";
         var targetUri = new Uri($"{backendUrl.TrimEnd('/')}{context.Request.Path}{context.Request.QueryString}");
 
-        using var client = new HttpClient();
+        using var handler = new HttpClientHandler 
+        { 
+            AllowAutoRedirect = false,
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
+        using var client = new HttpClient(handler);
         
         var requestMessage = new HttpRequestMessage(new HttpMethod(context.Request.Method), targetUri);
         
@@ -147,7 +159,7 @@ app.Use(async (context, next) =>
         catch (Exception ex)
         {
             context.Response.StatusCode = StatusCodes.Status502BadGateway;
-            await context.Response.WriteAsync($"Error proxying request to backend API: {ex.Message}");
+            await context.Response.WriteAsync($"Error proxying request to backend API. Target URI: {targetUri}. Exception: {ex}");
             return;
         }
     }

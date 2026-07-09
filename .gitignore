@@ -14,3 +14,4 @@ data/
 .vs/
 *.suo
 *.user
+node_modules

@@ -275,7 +275,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             }
 
             // Fallback logic based on postal code patterns
-            if (code.StartsWith("2") || suburb?.Contains("Johannesburg", StringComparison.OrdinalIgnoreCase) == true)
+            if (code.StartsWith("2") || code.StartsWith("1") || suburb?.Contains("Johannesburg", StringComparison.OrdinalIgnoreCase) == true)
                 return _configuration["Skypoint:PostalCodeMappings:Johannesburg"] ?? "2000";
 
             if (code.StartsWith("0") || suburb?.Contains("Pretoria", StringComparison.OrdinalIgnoreCase) == true)
