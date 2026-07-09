@@ -23,6 +23,7 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         public string? SkypointTrackNo { get; set; }       // Booking reference e.g. DROP-108768
         public string? SkypointWaybillNo { get; set; }     // Actual Skynet waybill barcode e.g. 080040106215
         public string? SkypointStatus { get; set; }
+        public bool IsPaid { get; set; }
         public string OrderSource { get; set; } = "skypoint"; // skypoint, shopify, woocommerce
         public string? VendorId { get; set; }
 

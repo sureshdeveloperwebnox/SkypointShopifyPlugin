@@ -1,0 +1,7 @@
+﻿{
+    "tracking":  null,
+    "details":  null,
+    "download":  {
+                     "error":  "Skypoint Waybill Download API returned BadRequest: {\"timeStamp\":\"2026-07-09T12:52:27.905394849\",\"message\":\"no waybill found.\",\"details\":\"uri=/api/service/booking/download/waybill/5ae70d21-5754-4f23-b3c4-817445c40622\"}"
+                 }
+}

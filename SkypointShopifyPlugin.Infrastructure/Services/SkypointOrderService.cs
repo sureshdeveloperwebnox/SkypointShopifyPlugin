@@ -172,8 +172,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                         Success = true,
                         Message = "Order processed successfully",
                         Order = order,
-                        SkypointBookingId = bookingResponse.Id,
-                        SkypointTrackNo = bookingResponse.TrackNo
+                        SkypointBookingId = !string.IsNullOrEmpty(bookingResponse.Id) ? bookingResponse.Id : order.SkypointBookingId,
+                        SkypointTrackNo = !string.IsNullOrEmpty(bookingResponse.TrackNo) ? bookingResponse.TrackNo : order.SkypointTrackNo
                     };
                 }
                 else
@@ -328,16 +328,58 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 // Update order tracking history
                 order.TrackingHistory = trackingResponse.TrackingInfo;
 
-                // Sync the waybill number if returned in the updated booking object
-                if (trackingResponse.Booking != null)
-                {
-                    var updatedWaybillNo = trackingResponse.Booking.ParcelDimensions
-                        ?.FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
-                        ?.ParcelTrackNo;
-                    if (!string.IsNullOrEmpty(updatedWaybillNo))
+                    bool IsValidBarcode(string? k) =>
+                        !string.IsNullOrEmpty(k) &&
+                        !k.StartsWith("DROP-", StringComparison.OrdinalIgnoreCase) &&
+                        !k.Contains("-");
+
+                    if (trackingResponse.Booking != null)
                     {
-                        order.SkypointWaybillNo = updatedWaybillNo;
-                        _logger.LogInformation("Updated order {OrderId} waybill number to {WaybillNo} from tracking response booking info", orderId, updatedWaybillNo);
+                        var updatedWaybillNo = trackingResponse.Booking.ParcelDimensions
+                            ?.FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
+                            ?.ParcelTrackNo;
+                        if (IsValidBarcode(updatedWaybillNo))
+                        {
+                            order.SkypointWaybillNo = updatedWaybillNo;
+                            _logger.LogInformation("Updated order {OrderId} waybill number to {WaybillNo} from tracking response booking info", orderId, updatedWaybillNo);
+                        }
+                    }
+
+                // If the order is unpaid, or missing waybill number, fetch fresh booking details to check status
+                if ((!order.IsPaid || string.IsNullOrEmpty(order.SkypointWaybillNo)) && !string.IsNullOrEmpty(order.SkypointBookingId) && Guid.TryParse(order.SkypointBookingId, out _))
+                {
+                    try
+                    {
+                        _logger.LogInformation("Order {OrderId} is unpaid or missing waybill number; fetching fresh booking details", orderId);
+                        var bookingDetails = await _skypointApiClient.GetBookingDetailsAsync(order.SkypointBookingId, token);
+                        if (bookingDetails != null)
+                        {
+                            order.IsPaid = bookingDetails.IsPaid;
+                            _logger.LogInformation("Updated order {OrderId} payment status to {IsPaid} from fresh booking details", orderId, bookingDetails.IsPaid);
+
+                            // WaybillResponse is now a strongly-typed DTO — direct access
+                            string? fetchedWaybillNo = bookingDetails.WaybillNumber;
+                            
+                            if (string.IsNullOrEmpty(fetchedWaybillNo) && bookingDetails.ParcelDimensions != null)
+                            {
+                                fetchedWaybillNo = bookingDetails.ParcelDimensions
+                                    .FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
+                                    ?.ParcelTrackNo;
+                            }
+
+                            _logger.LogInformation("Sync waybill extraction: WaybillNumber='{WaybillNum}', fetchedWaybillNo='{FetchedNo}'",
+                                bookingDetails.WaybillResponse?.WaybillNumber ?? "(null)", fetchedWaybillNo ?? "(null)");
+
+                            if (IsValidBarcode(fetchedWaybillNo))
+                            {
+                                order.SkypointWaybillNo = fetchedWaybillNo;
+                                _logger.LogInformation("Saved waybill number {WaybillNo} to order {OrderId} during sync", fetchedWaybillNo, orderId);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to fetch booking details for order {OrderId} during status sync", orderId);
                     }
                 }
 
@@ -451,20 +493,6 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     return null;
                 }
 
-                var waybillNumberForDownload = !string.IsNullOrEmpty(order.SkypointWaybillNo)
-                    ? order.SkypointWaybillNo
-                    : order.SkypointTrackNo;
-
-                if (string.IsNullOrEmpty(waybillNumberForDownload))
-                {
-                    _logger.LogWarning("Cannot download waybill for order {OrderId} - order has no waybill number or track number", orderId);
-                    return null;
-                }
-
-                _logger.LogInformation(
-                    "Downloading waybill for order {OrderId}: using waybill number '{WaybillNo}'",
-                    orderId, waybillNumberForDownload);
-
                 var vendorId = order.VendorId ?? "default";
                 var (token, _) = await GetOrRefreshTokenAsync(vendorId);
 
@@ -474,7 +502,25 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     return null;
                 }
 
-                if (!string.IsNullOrEmpty(order.SkypointBookingId))
+                // Build a prioritised list of candidate waybill/download keys to try
+                var candidateKeys = new List<string>();
+
+                // Helper helper to check if a key is a valid waybill barcode (not track number starting with DROP- or UUID containing -)
+                bool IsValidBarcode(string? k) =>
+                    !string.IsNullOrEmpty(k) &&
+                    !k.StartsWith("DROP-", StringComparison.OrdinalIgnoreCase) &&
+                    !k.Contains("-");
+
+                // 1st priority: stored SkypointWaybillNo (barcode)
+                if (IsValidBarcode(order.SkypointWaybillNo))
+                    candidateKeys.Add(order.SkypointWaybillNo!);
+
+                // 1.5 priority: if TrackNo is actually a barcode, add it
+                if (IsValidBarcode(order.SkypointTrackNo) && !candidateKeys.Contains(order.SkypointTrackNo!))
+                    candidateKeys.Add(order.SkypointTrackNo!);
+
+                // 2nd priority: fetch fresh booking details and extract waybill number
+                if (!string.IsNullOrEmpty(order.SkypointBookingId) && Guid.TryParse(order.SkypointBookingId, out _))
                 {
                     try
                     {
@@ -484,35 +530,20 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                         {
                             var rawJson = System.Text.Json.JsonSerializer.Serialize(bookingResponse);
                             _logger.LogInformation("Booking details response JSON: {Json}", rawJson);
-                            
-                            string? fetchedWaybillNo = null;
-                            if (bookingResponse.WaybillResponse != null)
+
+                            // Update payment and booking status from fresh details
+                            if (order.IsPaid != bookingResponse.IsPaid || order.SkypointStatus != bookingResponse.Status)
                             {
-                                if (bookingResponse.WaybillResponse is System.Text.Json.JsonElement jsonEl && jsonEl.ValueKind == System.Text.Json.JsonValueKind.Object)
-                                {
-                                    if (jsonEl.TryGetProperty("waybillNumber", out var wbProp) && wbProp.ValueKind == System.Text.Json.JsonValueKind.String)
-                                    {
-                                        fetchedWaybillNo = wbProp.GetString();
-                                    }
-                                }
-                                else
-                                {
-                                    try
-                                    {
-                                        var serialized = System.Text.Json.JsonSerializer.Serialize(bookingResponse.WaybillResponse);
-                                        using var doc = System.Text.Json.JsonDocument.Parse(serialized);
-                                        if (doc.RootElement.TryGetProperty("waybillNumber", out var wbProp) && wbProp.ValueKind == System.Text.Json.JsonValueKind.String)
-                                        {
-                                            fetchedWaybillNo = wbProp.GetString();
-                                        }
-                                    }
-                                    catch
-                                    {
-                                        // Ignore
-                                    }
-                                }
+                                order.IsPaid = bookingResponse.IsPaid;
+                                order.SkypointStatus = bookingResponse.Status;
+                                await _orderStore.UpdateOrderAsync(order);
+                                _logger.LogInformation("Updated order {OrderId} status to {Status} and IsPaid to {IsPaid} during waybill download", orderId, order.SkypointStatus, order.IsPaid);
                             }
 
+                            // Extract waybill barcode: WaybillResponse is now a strongly-typed DTO
+                            string? fetchedWaybillNo = bookingResponse.WaybillNumber;
+
+                            // Fallback: try parcelDimensions[].parcel_trackNo
                             if (string.IsNullOrEmpty(fetchedWaybillNo) && bookingResponse.ParcelDimensions != null)
                             {
                                 fetchedWaybillNo = bookingResponse.ParcelDimensions
@@ -520,12 +551,17 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                                     ?.ParcelTrackNo;
                             }
 
-                            if (!string.IsNullOrEmpty(fetchedWaybillNo))
+                            _logger.LogInformation("Waybill extraction: WaybillResponse.WaybillNumber='{WaybillNum}', ParcelTrackNo='{ParcelTrack}'",
+                                bookingResponse.WaybillResponse?.WaybillNumber ?? "(null)",
+                                bookingResponse.ParcelDimensions?.FirstOrDefault()?.ParcelTrackNo ?? "(null)");
+
+                            if (IsValidBarcode(fetchedWaybillNo))
                             {
                                 order.SkypointWaybillNo = fetchedWaybillNo;
-                                waybillNumberForDownload = fetchedWaybillNo;
-                                _logger.LogInformation("Successfully retrieved waybill number {WaybillNo} from booking details for order {OrderId}", fetchedWaybillNo, orderId);
                                 await _orderStore.UpdateOrderAsync(order);
+                                _logger.LogInformation("Saved waybill number {WaybillNo} to order {OrderId}", fetchedWaybillNo, orderId);
+                                if (!candidateKeys.Contains(fetchedWaybillNo!))
+                                    candidateKeys.Add(fetchedWaybillNo!);
                             }
                         }
                     }
@@ -535,33 +571,69 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     }
                 }
 
-                if (string.IsNullOrEmpty(waybillNumberForDownload))
+                // 3rd priority: If waybill barcode is still not found in details, query the tracking API
+                var hasBarcode = candidateKeys.Any(IsValidBarcode);
+                if (!hasBarcode && !string.IsNullOrEmpty(order.SkypointTrackNo))
                 {
-                    _logger.LogWarning("Cannot download waybill for order {OrderId} - waybill number is empty", orderId);
-                    return null;
-                }
-
-                WaybillDownloadResponse? response = null;
-                try
-                {
-                    response = await _skypointApiClient.DownloadWaybillAsync(waybillNumberForDownload, token);
-                    if (response != null && string.IsNullOrEmpty(response.FileName))
+                    try
                     {
-                        response.FileName = $"{waybillNumberForDownload}.pdf";
+                        _logger.LogInformation("Waybill barcode not found in booking details. Querying tracking API for trackNo {TrackNo} to retrieve waybill number", order.SkypointTrackNo);
+                        var trackingResponse = await _skypointApiClient.TrackBookingAsync(order.SkypointTrackNo, token);
+                        if (trackingResponse?.Booking != null)
+                        {
+                            var updatedWaybillNo = trackingResponse.Booking.ParcelDimensions
+                                ?.FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
+                                ?.ParcelTrackNo;
+                            if (IsValidBarcode(updatedWaybillNo))
+                            {
+                                order.SkypointWaybillNo = updatedWaybillNo;
+                                await _orderStore.UpdateOrderAsync(order);
+                                _logger.LogInformation("Successfully retrieved waybill number {WaybillNo} from tracking response for order {OrderId}", updatedWaybillNo, orderId);
+                                if (!candidateKeys.Contains(updatedWaybillNo!))
+                                    candidateKeys.Insert(0, updatedWaybillNo!); // Try the actual barcode first
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to fetch latest waybill number from tracking API for order {OrderId}", orderId);
                     }
                 }
-                catch (Exception apiEx)
+
+                if (candidateKeys.Count == 0)
                 {
-                    _logger.LogError(apiEx, "Failed to download waybill {WaybillNo} from API.", waybillNumberForDownload);
+                    _logger.LogWarning("Cannot download waybill for order {OrderId} - no valid waybill barcode generated yet", orderId);
+                    throw new InvalidOperationException("Waybill barcode is still being generated by SkyNet. Please wait a few minutes and click 'Sync Tracking Info'.");
                 }
 
-                if (response != null && !string.IsNullOrEmpty(response.FileStream))
+                // Try each candidate key in order
+                foreach (var candidateKey in candidateKeys)
                 {
-                    return response;
+                    _logger.LogInformation("Attempting waybill download for order {OrderId} using key '{Key}'", orderId, candidateKey);
+                    try
+                    {
+                        var response = await _skypointApiClient.DownloadWaybillAsync(candidateKey, token);
+                        if (response != null && !string.IsNullOrEmpty(response.FileStream))
+                        {
+                            if (string.IsNullOrEmpty(response.FileName))
+                                response.FileName = $"{candidateKey}.pdf";
+
+                            _logger.LogInformation("Waybill download successful for order {OrderId} using key '{Key}'", orderId, candidateKey);
+                            return response;
+                        }
+                    }
+                    catch (Exception apiEx)
+                    {
+                        _logger.LogWarning(apiEx, "Waybill download attempt failed for key '{Key}' (order {OrderId}). Trying next fallback.", candidateKey, orderId);
+                    }
                 }
 
-                _logger.LogWarning("No waybill PDF could be retrieved from the SkyPoint API for order {OrderId} (Waybill number: {WaybillNo}). No fallback generation is performed.", orderId, waybillNumberForDownload);
+                _logger.LogWarning("No waybill PDF could be retrieved from the SkyPoint API for order {OrderId}. Tried keys: {Keys}", orderId, string.Join(", ", candidateKeys));
                 return null;
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -569,6 +641,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 return null;
             }
         }
+
 
         private async Task<(string? token, string? userId)> GetOrRefreshTokenAsync(string vendorId)
         {
@@ -612,6 +685,118 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             }
 
             return (null, null);
+        }
+
+        public async Task<SkypointOrderResponse> PayOrderWithWalletAsync(string orderId)
+        {
+            try
+            {
+                var order = await _orderStore.GetOrderByIdAsync(orderId);
+                if (order == null)
+                {
+                    return new SkypointOrderResponse { Success = false, Message = "Order not found" };
+                }
+
+                if (string.IsNullOrEmpty(order.SkypointTrackNo))
+                {
+                    return new SkypointOrderResponse { Success = false, Message = "Order has not been booked yet (no tracking/booking ID found)" };
+                }
+
+                var vendorId = order.VendorId ?? "default";
+                var (token, _) = await GetOrRefreshTokenAsync(vendorId);
+
+                if (string.IsNullOrEmpty(token))
+                {
+                    return new SkypointOrderResponse { Success = false, Message = "Skypoint credentials not configured or expired" };
+                }
+
+                _logger.LogInformation("Processing booking payment via wallet for order {OrderId} (trackNo: {TrackNo})", orderId, order.SkypointTrackNo);
+
+                BookingResponse? bookingResponse = null;
+                try
+                {
+                    bookingResponse = await _skypointApiClient.ProcessBookingAsync(order.SkypointTrackNo, token);
+                }
+                catch (HttpRequestException httpEx)
+                    when (httpEx.Message.Contains("already has a waybill", StringComparison.OrdinalIgnoreCase) ||
+                          httpEx.Message.Contains("already processed", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Booking was already paid/processed previously — fetch existing booking details using GUID if available
+                    if (!string.IsNullOrEmpty(order.SkypointBookingId) && Guid.TryParse(order.SkypointBookingId, out _))
+                    {
+                        _logger.LogInformation("Booking {TrackNo} already has a waybill. Fetching existing booking details using GUID '{BookingId}'.", order.SkypointTrackNo, order.SkypointBookingId);
+                        try
+                        {
+                            bookingResponse = await _skypointApiClient.GetBookingDetailsAsync(order.SkypointBookingId, token);
+                        }
+                        catch (Exception fetchEx)
+                        {
+                            _logger.LogWarning(fetchEx, "Could not fetch booking details for GUID '{BookingId}'", order.SkypointBookingId);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Booking {TrackNo} already has a waybill, but no valid booking ID GUID is stored. Querying tracking API as fallback.", order.SkypointTrackNo);
+                        try
+                        {
+                            var trackingResponse = await _skypointApiClient.TrackBookingAsync(order.SkypointTrackNo, token);
+                            if (trackingResponse?.Booking != null)
+                            {
+                                bookingResponse = trackingResponse.Booking;
+                            }
+                        }
+                        catch (Exception trackEx)
+                        {
+                            _logger.LogWarning(trackEx, "Could not query tracking fallback for trackNo '{TrackNo}'", order.SkypointTrackNo);
+                        }
+                    }
+                }
+
+                if (bookingResponse != null)
+                {
+                    // Update order with the processed booking response details
+                    SkypointOrderMapper.UpdateWithBookingResponse(order, bookingResponse);
+
+                    // If waybill number is still missing after payment, try to fetch it from the GET booking details API
+                    if (string.IsNullOrEmpty(order.SkypointWaybillNo) && !string.IsNullOrEmpty(order.SkypointBookingId) && Guid.TryParse(order.SkypointBookingId, out _))
+                    {
+                        _logger.LogInformation("Payment processed but waybill number is missing. Querying GetBookingDetailsAsync as fallback.");
+                        try
+                        {
+                            var freshDetails = await _skypointApiClient.GetBookingDetailsAsync(order.SkypointBookingId, token);
+                            if (freshDetails != null)
+                            {
+                                SkypointOrderMapper.UpdateWithBookingResponse(order, freshDetails);
+                            }
+                        }
+                        catch (Exception fetchEx)
+                        {
+                            _logger.LogWarning(fetchEx, "Failed to fetch fresh booking details during payment check for GUID '{BookingId}'", order.SkypointBookingId);
+                        }
+                    }
+
+                    await _orderStore.UpdateOrderAsync(order);
+
+                    _logger.LogInformation("Successfully paid and processed booking {TrackNo} for order {OrderId}. WaybillNo: {WaybillNo}",
+                        order.SkypointTrackNo, orderId, order.SkypointWaybillNo);
+
+                    return new SkypointOrderResponse
+                    {
+                        Success = true,
+                        Message = "Payment processed and waybill created successfully",
+                        Order = order,
+                        SkypointBookingId = !string.IsNullOrEmpty(bookingResponse.Id) ? bookingResponse.Id : order.SkypointBookingId,
+                        SkypointTrackNo = !string.IsNullOrEmpty(bookingResponse.TrackNo) ? bookingResponse.TrackNo : order.SkypointTrackNo
+                    };
+                }
+
+                return new SkypointOrderResponse { Success = false, Message = "API processed the request but returned no booking details." };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing booking payment via wallet for order {OrderId}", orderId);
+                return new SkypointOrderResponse { Success = false, Message = $"Error: {ex.Message}" };
+            }
         }
     }
 }

@@ -296,7 +296,8 @@ public class ShopifyOrderPollingService : BackgroundService
             ToCounterCode = string.Empty,
             ToCounterName = string.Empty,
             SaIdNumber = string.Empty,
-            PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty)
+            PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty),
+            WooCommerceOrderId = order.id.ToString()
         };
     }
 

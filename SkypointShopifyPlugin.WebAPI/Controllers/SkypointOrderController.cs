@@ -261,15 +261,27 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         {
             _logger.LogInformation("Download waybill request for order {OrderId}", orderId);
 
-            var result = await _orderService.DownloadWaybillAsync(orderId);
+            try
+            {
+                var result = await _orderService.DownloadWaybillAsync(orderId);
 
-            if (result != null)
-            {
-                return Ok(result);
+                if (result != null)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return NotFound(new { success = false, message = "Waybill not found or download failed" });
+                }
             }
-            else
+            catch (InvalidOperationException ex)
             {
-                return NotFound(new { success = false, message = "Waybill not found or download failed" });
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading waybill for order {OrderId}", orderId);
+                return StatusCode(500, new { success = false, message = "An error occurred while downloading the waybill" });
             }
         }
     }

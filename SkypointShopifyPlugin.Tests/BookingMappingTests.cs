@@ -63,7 +63,8 @@ namespace SkypointShopifyPlugin.Tests
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     { "Skypoint:SuburbMappings:BLOEMFONTEIN", "BLOEMFONTEIN" },
-                    { "Skypoint:SuburbMappings:GERMISTON", "GERMISTON" }
+                    { "Skypoint:SuburbMappings:GERMISTON", "GERMISTON" },
+                    { "Skypoint:PostalCodeMappings:GERMISTON", "1401" }
                 })
                 .Build();
 

@@ -1,0 +1,75 @@
+﻿{
+    "trackingInfo":  [
+                         {
+                             "WaybillEventDate":  "13/05/2025",
+                             "WaybillEventTime":  "01:50:00",
+                             "WaybillEventDescription":  "POD image scanned",
+                             "WaybillEventBranch":  "HostServer",
+                             "WaybillEventId":  1279701881
+                         },
+                         {
+                             "WaybillEventDate":  "12/05/2025",
+                             "WaybillEventTime":  "10:47:45",
+                             "WaybillEventDescription":  "3rd Party POD received",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1277770375
+                         },
+                         {
+                             "WaybillEventDate":  "12/05/2025",
+                             "WaybillEventTime":  "10:20:00",
+                             "WaybillEventDescription":  "POD created",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1278665974
+                         },
+                         {
+                             "WaybillEventDate":  "12/05/2025",
+                             "WaybillEventTime":  "10:20:00",
+                             "WaybillEventDescription":  "Delivered",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1278665971
+                         },
+                         {
+                             "WaybillEventDate":  "12/05/2025",
+                             "WaybillEventTime":  "06:37:41",
+                             "WaybillEventDescription":  "Out on Delivery",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1277482525
+                         },
+                         {
+                             "WaybillEventDate":  "09/05/2025",
+                             "WaybillEventTime":  "18:59:11",
+                             "WaybillEventDescription":  "Scan into branch",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1275595504
+                         },
+                         {
+                             "WaybillEventDate":  "09/05/2025",
+                             "WaybillEventTime":  "18:09:35",
+                             "WaybillEventDescription":  "In-house-client scan",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1275524113
+                         },
+                         {
+                             "WaybillEventDate":  "09/05/2025",
+                             "WaybillEventTime":  "17:21:26",
+                             "WaybillEventDescription":  "Collection at Sender",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1275447892
+                         },
+                         {
+                             "WaybillEventDate":  "09/05/2025",
+                             "WaybillEventTime":  "17:21:00",
+                             "WaybillEventDescription":  "Collection at Sender",
+                             "WaybillEventBranch":  "",
+                             "WaybillEventId":  1275450785
+                         },
+                         {
+                             "WaybillEventDate":  "09/05/2025",
+                             "WaybillEventTime":  "15:02:32",
+                             "WaybillEventDescription":  "Created waybill",
+                             "WaybillEventBranch":  "HostServer",
+                             "WaybillEventId":  1275240407
+                         }
+                     ],
+    "booking":  null
+}

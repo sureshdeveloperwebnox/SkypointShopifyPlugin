@@ -167,7 +167,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     throw new HttpRequestException($"Skypoint API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
                 }
 
-                var result = JsonSerializer.Deserialize<BookingResponse>(responseBody, _jsonOptions);
+                var result = DeserializeBookingResponse(responseBody);
                 _logger.LogInformation("Booking created with tracking number: {TrackNo}", result?.TrackNo);
                 return result!;
             });
@@ -175,6 +175,12 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public async Task<TrackingResponse> TrackBookingAsync(string trackNo, string authToken)
         {
+            if (string.IsNullOrEmpty(trackNo) || (trackNo.Length >= 13 && long.TryParse(trackNo, out _)))
+            {
+                _logger.LogError("Invalid tracking number '{TrackNo}' passed to TrackBookingAsync. Shopify order ID must not be sent.", trackNo);
+                throw new ArgumentException($"Invalid tracking number '{trackNo}'. Shopify order ID must not be sent.", nameof(trackNo));
+            }
+
             var url = _settings.GetTrackingUrl(trackNo);
             _logger.LogInformation("Tracking request to {Url}", url);
 
@@ -231,6 +237,12 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public async Task<WaybillDownloadResponse> DownloadWaybillAsync(string waybillNumber, string authToken)
         {
+            if (string.IsNullOrEmpty(waybillNumber) || (waybillNumber.Length >= 13 && long.TryParse(waybillNumber, out _)))
+            {
+                _logger.LogError("Invalid waybill number '{WaybillNumber}' passed to DownloadWaybillAsync. Shopify order ID must not be sent.", waybillNumber);
+                throw new ArgumentException($"Invalid waybill number '{waybillNumber}'. Shopify order ID must not be sent.", nameof(waybillNumber));
+            }
+
             var url = _settings.GetWaybillDownloadUrl(waybillNumber);
             _logger.LogInformation("Waybill download request to {Url}", url);
 
@@ -257,6 +269,12 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
         public async Task<BookingResponse> GetBookingDetailsAsync(string bookingId, string authToken)
         {
+            if (string.IsNullOrEmpty(bookingId) || !Guid.TryParse(bookingId, out _))
+            {
+                _logger.LogError("Invalid booking ID '{BookingId}' passed to GetBookingDetailsAsync. Booking ID must be a valid GUID.", bookingId);
+                throw new ArgumentException($"Invalid booking ID '{bookingId}'. Must be a valid GUID.", nameof(bookingId));
+            }
+
             var url = _settings.GetBookingDetailsUrl(bookingId);
             _logger.LogInformation("Booking details fetch request to {Url}", url);
 
@@ -274,10 +292,63 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     throw new HttpRequestException($"Skypoint booking details fetch API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
                 }
 
-                var result = JsonSerializer.Deserialize<BookingResponse>(responseBody, _jsonOptions);
+                var result = DeserializeBookingResponse(responseBody);
                 _logger.LogInformation("Successfully retrieved booking details for ID {BookingId}. Status: {Status}", bookingId, result?.Status);
                 return result!;
             });
+        }
+
+        public async Task<BookingResponse> ProcessBookingAsync(string trackNo, string authToken)
+        {
+            if (string.IsNullOrEmpty(trackNo) || (trackNo.Length >= 13 && long.TryParse(trackNo, out _)))
+            {
+                _logger.LogError("Invalid tracking number '{TrackNo}' passed to ProcessBookingAsync. Shopify order ID must not be sent.", trackNo);
+                throw new ArgumentException($"Invalid tracking number '{trackNo}'. Shopify order ID must not be sent.", nameof(trackNo));
+            }
+
+            var url = _settings.GetProcessBookingUrl(trackNo);
+            _logger.LogInformation("Booking process request to {Url}", url);
+
+            return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
+            {
+                var httpRequest = new HttpRequestMessage(HttpMethod.Post, url);
+                httpRequest.Headers.Add("Authorization", $"Bearer {authToken}");
+                httpRequest.Content = new StringContent(string.Empty, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Booking process API returned {Status}: {Body}", (int)response.StatusCode, responseBody);
+                    throw new HttpRequestException($"Skypoint booking process API returned {response.StatusCode}: {responseBody}", null, response.StatusCode);
+                }
+
+                var result = DeserializeBookingResponse(responseBody);
+                _logger.LogInformation("Booking processed successfully for {TrackNo}. Status: {Status}", trackNo, result?.Status);
+                return result!;
+            });
+        }
+
+        private BookingResponse DeserializeBookingResponse(string json)
+        {
+            if (string.IsNullOrEmpty(json))
+                return new BookingResponse();
+
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.TryGetProperty("details", out var detailsElement) && detailsElement.ValueKind != JsonValueKind.Null)
+                {
+                    return JsonSerializer.Deserialize<BookingResponse>(detailsElement.GetRawText(), _jsonOptions) ?? new BookingResponse();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse json or extract 'details' property, falling back to direct deserialization");
+            }
+
+            return JsonSerializer.Deserialize<BookingResponse>(json, _jsonOptions) ?? new BookingResponse();
         }
     }
 }

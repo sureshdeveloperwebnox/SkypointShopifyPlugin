@@ -88,5 +88,8 @@ namespace SkypointShopifyPlugin.Core.Configuration
 
         /// <summary>Gets the full booking details URL for a specific booking ID</summary>
         public string GetBookingDetailsUrl(string bookingId) => $"{BaseUrl}/api/service/booking/{bookingId}";
+
+        /// <summary>Gets the full process booking / wallet pay URL for a specific track number</summary>
+        public string GetProcessBookingUrl(string trackNo) => $"{BaseUrl}/api/service/booking/process/{trackNo}";
     }
 }
