@@ -1,0 +1,13 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/publish
+**/out
+**/.env
+**/.env.example
+**/node_modules
+**/package-lock.json
+**/ngrok-api.log
+**/data

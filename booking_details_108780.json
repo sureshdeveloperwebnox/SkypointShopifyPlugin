@@ -1,0 +1,121 @@
+﻿{
+    "tracking":  null,
+    "details":  {
+                    "id":  "a8ccc351-91d3-4f60-8eb3-97e2188cadbf",
+                    "createAt":  "2026-07-07T12:04:23.468157",
+                    "user":  {
+                                 "id":  "59cb2dd7-be9c-497e-8122-155d7282d603",
+                                 "createAt":  "2026-07-02T13:29:24.373568",
+                                 "username":  "faropef162@lovadio.com",
+                                 "userType":  "USER",
+                                 "owner":  {
+                                               "id":  "3ad6e550-2cbe-43ba-a666-87b9dceaeb23",
+                                               "createAt":  "2026-07-02T13:29:24.367172",
+                                               "mobile":  "6565656565",
+                                               "firstName":  "sky",
+                                               "surname":  "net",
+                                               "mobileConfirmation":  {
+                                                                          "code":  "4690",
+                                                                          "confirmed":  true,
+                                                                          "confirmationTime":  "2026-07-02T13:29:56.220885",
+                                                                          "codeExpirationTime":  "2026-07-02T15:29:24.3622399",
+                                                                          "resendOtpCount":  null
+                                                                      },
+                                               "email":  "faropef162@lovadio.com",
+                                               "salesCode":  "SKYA001",
+                                               "businessName":  null,
+                                               "businessVat":  null,
+                                               "businessAddress":  null
+                                           },
+                                 "token":  null,
+                                 "role":  "CLIENT",
+                                 "permissions":  [
+                                                     "CLIENT_ALL"
+                                                 ],
+                                 "accountNo":  "FM103027",
+                                 "canAddStickers":  "INACTIVE",
+                                 "password":  "$2a$10$7gUaP2jw/qFbQbO9C88riuyEiO.Pn04.vi4Y/7GpXUqcQvZOACqEu",
+                                 "vatDetails":  null
+                             },
+                    "pickUpAddress":  "140 North Reef Road",
+                    "dropOffAddress":  "140 North Reef Road",
+                    "pickUpDate":  "07",
+                    "pickUpTime":  "15:34",
+                    "price":  75,
+                    "comment":  "@PickUp: Shopify Order #1088 @DropOff: No comment",
+                    "status":  "CREATED_WAYBILL",
+                    "skynetStatus":  "created waybill",
+                    "trackNo":  "DROP-108780",
+                    "province":  null,
+                    "destinationProvince":  null,
+                    "type":  "ROAD",
+                    "distance":  0,
+                    "dropOffPerson":  {
+                                          "id":  "d92569ef-2c9d-4d32-b5c1-feceb285f252",
+                                          "createAt":  "2026-07-07T12:04:23.466489",
+                                          "firstName":  "Tim",
+                                          "lastName":  "Joseph",
+                                          "phone":  "",
+                                          "base64Image":  null,
+                                          "email":  "timjposeph@gmail.com",
+                                          "companyName":  " ",
+                                          "complex":  "",
+                                          "unitNo":  "",
+                                          "floor":  "",
+                                          "suburb":  "Johannesburg",
+                                          "city":  "Johannesburg South",
+                                          "state":  "Western Cape",
+                                          "zip":  "2000"
+                                      },
+                    "pickUpPerson":  {
+                                         "id":  "db05d5a1-f640-4b8d-9164-d20f21abd178",
+                                         "createAt":  "2026-07-07T12:04:23.464663",
+                                         "firstName":  "Tim",
+                                         "lastName":  "Joseph",
+                                         "phone":  "",
+                                         "base64Image":  null,
+                                         "email":  "timjposeph@gmail.com",
+                                         "companyName":  " ",
+                                         "complex":  "",
+                                         "unitNo":  "",
+                                         "floor":  "",
+                                         "suburb":  "Johannesburg",
+                                         "city":  "Johannesburg South",
+                                         "state":  "Western Cape",
+                                         "zip":  "2000"
+                                     },
+                    "waybillResponse":  {
+                                            "waybillNumber":  "080040108784"
+                                        },
+                    "fromSuburb":  "Johannesburg",
+                    "toSuburb":  "Johannesburg",
+                    "pickUpPCode":  "2000",
+                    "dropOffPCode":  "2000",
+                    "parcelDimensions":  [
+                                             {
+                                                 "parcel_length":  10,
+                                                 "parcel_breadth":  10,
+                                                 "parcel_height":  10,
+                                                 "parcel_mass":  0.5,
+                                                 "parcel_reference":  "DEE-48793794150624",
+                                                 "parcel_description":  null,
+                                                 "parcel_trackNo":  null,
+                                                 "predefinedParcel":  null,
+                                                 "selected_parcel":  null
+                                             }
+                                         ],
+                    "isPaid":  true,
+                    "receiverPaying":  false,
+                    "exportDetails":  null,
+                    "importDetails":  null,
+                    "promoCode":  null,
+                    "promiseDateTimestamp":  "2026-07-08T12:04:23.468157",
+                    "cancellationReason":  null,
+                    "saIdNumber":  "",
+                    "shipmentType":  "",
+                    "wooCommerceOrderId":  null,
+                    "toCounterCode":  "",
+                    "toCounterName":  null
+                },
+    "download":  null
+}

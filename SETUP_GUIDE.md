@@ -473,54 +473,65 @@ In Azure Portal:
 
 ### Option B: Docker Deployment
 
-#### Create Dockerfile
+We provide containerized setup for both the **WebAPI** and **WebUI** services using Docker Compose.
 
-Create `Dockerfile` in project root:
+#### Dockerfiles
 
-```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
-WORKDIR /app
-EXPOSE 80
-EXPOSE 443
+There are two separate Dockerfiles:
+1. [Dockerfile](file:///d:/New%20folder/SkypointShopifyPlugin/SkypointShopifyPlugin.WebAPI/Dockerfile) for the backend API.
+2. [Dockerfile](file:///d:/New%20folder/SkypointShopifyPlugin/SkypointShopifyPlugin.WebUI/Dockerfile) for the Blazor WebUI frontend.
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-WORKDIR /src
-COPY ["SkypointShopifyPlugin.WebAPI/SkypointShopifyPlugin.WebAPI.csproj", "SkypointShopifyPlugin.WebAPI/"]
-COPY ["SkypointShopifyPlugin.Core/SkypointShopifyPlugin.Core.csproj", "SkypointShopifyPlugin.Core/"]
-COPY ["SkypointShopifyPlugin.Application/SkypointShopifyPlugin.Application.csproj", "SkypointShopifyPlugin.Application/"]
-COPY ["SkypointShopifyPlugin.Infrastructure/SkypointShopifyPlugin.Infrastructure.csproj", "SkypointShopifyPlugin.Infrastructure/"]
-RUN dotnet restore "SkypointShopifyPlugin.WebAPI/SkypointShopifyPlugin.WebAPI.csproj"
-COPY . .
-WORKDIR "/src/SkypointShopifyPlugin.WebAPI"
-RUN dotnet build "SkypointShopifyPlugin.WebAPI.csproj" -c Release -o /app/build
+#### Docker Compose Configuration
 
-FROM build AS publish
-RUN dotnet publish "SkypointShopifyPlugin.WebAPI.csproj" -c Release -o /app/publish /p:UseAppHost=false
+The root [docker-compose.yml](file:///d:/New%20folder/SkypointShopifyPlugin/docker-compose.yml) orchestrates these services:
 
-FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "SkypointShopifyPlugin.WebAPI.dll"]
+```yaml
+services:
+  webapi:
+    image: skypoint-shopify-plugin-api:latest
+    build:
+      context: .
+      dockerfile: SkypointShopifyPlugin.WebAPI/Dockerfile
+    ports:
+      - "5126:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    env_file:
+      - .env
+    volumes:
+      - ./SkypointShopifyPlugin.WebAPI/data:/app/data
+
+  webui:
+    image: skypoint-shopify-plugin-ui:latest
+    build:
+      context: .
+      dockerfile: SkypointShopifyPlugin.WebUI/Dockerfile
+    ports:
+      - "5226:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - BackendApi__BaseUrl=http://webapi:8080
+    env_file:
+      - .env
+    depends_on:
+      - webapi
 ```
 
-#### Build and Run Docker Image
+#### Build and Run with Docker Compose
+
+1. **Configure Environment Variables**: Ensure your `.env` file at the root contains correct Shopify and Skypoint API credentials.
+2. **Build and Start Containers**: Run the following command from the root directory:
 
 ```bash
-# Build image
-docker build -t skypoint-shopify-plugin .
-
-# Run container
-docker run -p 8080:80 -e Shopify__ClientId="your_id" -e Shopify__ClientSecret="your_secret" skypoint-shopify-plugin
+docker compose up -d --build
 ```
 
-#### Deploy to Docker Hub or Azure Container Registry
+This will build the images, launch both the WebAPI (accessible at `http://localhost:5126`) and WebUI (accessible at `http://localhost:5226`), and set up the `webapi-data` persistent volume for configurations and tokens.
+
+3. **Stop Containers**:
 
 ```bash
-# Tag image
-docker tag skypoint-shopify-plugin your-dockerhub-username/skypoint-shopify-plugin
-
-# Push to Docker Hub
-docker push your-dockerhub-username/skypoint-shopify-plugin
+docker compose down
 ```
 
 ### Option C: VPS/Cloud Server Deployment

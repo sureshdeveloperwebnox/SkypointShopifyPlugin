@@ -1,0 +1,29 @@
+services:
+  webapi:
+    image: skypoint-shopify-plugin-api:latest
+    build:
+      context: .
+      dockerfile: SkypointShopifyPlugin.WebAPI/Dockerfile
+    ports:
+      - "5126:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    env_file:
+      - .env
+    volumes:
+      - ./SkypointShopifyPlugin.WebAPI/data:/app/data
+
+  webui:
+    image: skypoint-shopify-plugin-ui:latest
+    build:
+      context: .
+      dockerfile: SkypointShopifyPlugin.WebUI/Dockerfile
+    ports:
+      - "5226:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - BackendApi__BaseUrl=http://webapi:8080
+    env_file:
+      - .env
+    depends_on:
+      - webapi

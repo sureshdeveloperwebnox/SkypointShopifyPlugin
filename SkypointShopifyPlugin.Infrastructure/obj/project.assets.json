@@ -34,6 +34,48 @@
           }
         }
       },
+      "Microsoft.Extensions.Caching.Abstractions/9.0.6": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Extensions.Primitives": "9.0.6"
+        },
+        "compile": {
+          "lib/net9.0/Microsoft.Extensions.Caching.Abstractions.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.Extensions.Caching.Abstractions.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net8.0/_._": {}
+        }
+      },
+      "Microsoft.Extensions.Caching.Memory/9.0.6": {
+        "type": "package",
+        "dependencies": {
+          "Microsoft.Extensions.Caching.Abstractions": "9.0.6",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "9.0.6",
+          "Microsoft.Extensions.Logging.Abstractions": "9.0.6",
+          "Microsoft.Extensions.Options": "9.0.6",
+          "Microsoft.Extensions.Primitives": "9.0.6"
+        },
+        "compile": {
+          "lib/net9.0/Microsoft.Extensions.Caching.Memory.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.Extensions.Caching.Memory.dll": {
+            "related": ".xml"
+          }
+        },
+        "build": {
+          "buildTransitive/net8.0/_._": {}
+        }
+      },
       "Microsoft.Extensions.Configuration/10.0.9": {
         "type": "package",
         "dependencies": {
@@ -593,6 +635,62 @@
         "lib/netstandard2.0/MediatR.Contracts.xml",
         "mediatr.contracts.2.0.1.nupkg.sha512",
         "mediatr.contracts.nuspec"
+      ]
+    },
+    "Microsoft.Extensions.Caching.Abstractions/9.0.6": {
+      "sha512": "bL/xQsVNrdVkzjP5yjX4ndkQ03H3+Bk3qPpl+AMCEJR2RkfgAYmoQ/xXffPV7is64+QHShnhA12YAaFmNbfM+A==",
+      "type": "package",
+      "path": "microsoft.extensions.caching.abstractions/9.0.6",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/Microsoft.Extensions.Caching.Abstractions.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net8.0/_._",
+        "buildTransitive/netcoreapp2.0/Microsoft.Extensions.Caching.Abstractions.targets",
+        "lib/net462/Microsoft.Extensions.Caching.Abstractions.dll",
+        "lib/net462/Microsoft.Extensions.Caching.Abstractions.xml",
+        "lib/net8.0/Microsoft.Extensions.Caching.Abstractions.dll",
+        "lib/net8.0/Microsoft.Extensions.Caching.Abstractions.xml",
+        "lib/net9.0/Microsoft.Extensions.Caching.Abstractions.dll",
+        "lib/net9.0/Microsoft.Extensions.Caching.Abstractions.xml",
+        "lib/netstandard2.0/Microsoft.Extensions.Caching.Abstractions.dll",
+        "lib/netstandard2.0/Microsoft.Extensions.Caching.Abstractions.xml",
+        "microsoft.extensions.caching.abstractions.9.0.6.nupkg.sha512",
+        "microsoft.extensions.caching.abstractions.nuspec",
+        "useSharedDesignerContext.txt"
+      ]
+    },
+    "Microsoft.Extensions.Caching.Memory/9.0.6": {
+      "sha512": "qPW2d798tBPZcRmrlaBJqyChf2+0odDdE+0Lxvrr0ywkSNl1oNMK8AKrOfDwyXyjuLCv0ua7p6nrUExCeXhCcg==",
+      "type": "package",
+      "path": "microsoft.extensions.caching.memory/9.0.6",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "Icon.png",
+        "LICENSE.TXT",
+        "PACKAGE.md",
+        "THIRD-PARTY-NOTICES.TXT",
+        "buildTransitive/net461/Microsoft.Extensions.Caching.Memory.targets",
+        "buildTransitive/net462/_._",
+        "buildTransitive/net8.0/_._",
+        "buildTransitive/netcoreapp2.0/Microsoft.Extensions.Caching.Memory.targets",
+        "lib/net462/Microsoft.Extensions.Caching.Memory.dll",
+        "lib/net462/Microsoft.Extensions.Caching.Memory.xml",
+        "lib/net8.0/Microsoft.Extensions.Caching.Memory.dll",
+        "lib/net8.0/Microsoft.Extensions.Caching.Memory.xml",
+        "lib/net9.0/Microsoft.Extensions.Caching.Memory.dll",
+        "lib/net9.0/Microsoft.Extensions.Caching.Memory.xml",
+        "lib/netstandard2.0/Microsoft.Extensions.Caching.Memory.dll",
+        "lib/netstandard2.0/Microsoft.Extensions.Caching.Memory.xml",
+        "microsoft.extensions.caching.memory.9.0.6.nupkg.sha512",
+        "microsoft.extensions.caching.memory.nuspec",
+        "useSharedDesignerContext.txt"
       ]
     },
     "Microsoft.Extensions.Configuration/10.0.9": {
@@ -1450,6 +1548,7 @@
   "projectFileDependencyGroups": {
     "net9.0": [
       "MediatR >= 14.1.0",
+      "Microsoft.Extensions.Caching.Memory >= 9.0.6",
       "Microsoft.Extensions.Configuration.Abstractions >= 10.0.9",
       "Microsoft.Extensions.Configuration.Binder >= 10.0.9",
       "Microsoft.Extensions.Hosting.Abstractions >= 9.0.6",
@@ -1524,6 +1623,10 @@
           "MediatR": {
             "target": "Package",
             "version": "[14.1.0, )"
+          },
+          "Microsoft.Extensions.Caching.Memory": {
+            "target": "Package",
+            "version": "[9.0.6, )"
           },
           "Microsoft.Extensions.Configuration.Abstractions": {
             "target": "Package",

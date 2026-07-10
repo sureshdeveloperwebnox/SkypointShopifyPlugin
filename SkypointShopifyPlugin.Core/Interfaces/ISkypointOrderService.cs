@@ -70,5 +70,10 @@ namespace SkypointShopifyPlugin.Core.Interfaces
             string pudoCity,
             string pudoZip,
             string pudoProvider);
+
+        /// <summary>
+        /// Pay for an order using Skypoint wallet balance
+        /// </summary>
+        Task<SkypointOrderResponse> PayOrderWithWalletAsync(string orderId);
     }
 }

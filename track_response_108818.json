@@ -1,0 +1,131 @@
+﻿{
+    "trackingInfo":  [
+                         {
+                             "WaybillEventDate":  "20/05/2025",
+                             "WaybillEventTime":  "16:48:13",
+                             "WaybillEventDescription":  "3rd Party POD received",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1287013748
+                         },
+                         {
+                             "WaybillEventDate":  "20/05/2025",
+                             "WaybillEventTime":  "15:36:36",
+                             "WaybillEventDescription":  "3rd Party POD received",
+                             "WaybillEventBranch":  "Witbank",
+                             "WaybillEventId":  1286912569
+                         },
+                         {
+                             "WaybillEventDate":  "16/05/2025",
+                             "WaybillEventTime":  "18:16:00",
+                             "WaybillEventDescription":  "POD image scanned",
+                             "WaybillEventBranch":  "HostServer",
+                             "WaybillEventId":  1284104105
+                         },
+                         {
+                             "WaybillEventDate":  "16/05/2025",
+                             "WaybillEventTime":  "15:42:20",
+                             "WaybillEventDescription":  "3rd Party POD received",
+                             "WaybillEventBranch":  "East London",
+                             "WaybillEventId":  1283688847
+                         },
+                         {
+                             "WaybillEventDate":  "16/05/2025",
+                             "WaybillEventTime":  "15:13:00",
+                             "WaybillEventDescription":  "POD created",
+                             "WaybillEventBranch":  "East London",
+                             "WaybillEventId":  1286895253
+                         },
+                         {
+                             "WaybillEventDate":  "16/05/2025",
+                             "WaybillEventTime":  "15:13:00",
+                             "WaybillEventDescription":  "Delivered",
+                             "WaybillEventBranch":  "East London",
+                             "WaybillEventId":  1286895250
+                         },
+                         {
+                             "WaybillEventDate":  "16/05/2025",
+                             "WaybillEventTime":  "07:55:34",
+                             "WaybillEventDescription":  "Out on Line Haul",
+                             "WaybillEventBranch":  "HostServer",
+                             "WaybillEventId":  1283248537
+                         },
+                         {
+                             "WaybillEventDate":  "16/05/2025",
+                             "WaybillEventTime":  "04:37:16",
+                             "WaybillEventDescription":  "Received In Branch HostServer",
+                             "WaybillEventBranch":  "HostServer",
+                             "WaybillEventId":  1283109769
+                         },
+                         {
+                             "WaybillEventDate":  "15/05/2025",
+                             "WaybillEventTime":  "10:08:56",
+                             "WaybillEventDescription":  "Out on Delivery",
+                             "WaybillEventBranch":  "East London",
+                             "WaybillEventId":  1282168422
+                         },
+                         {
+                             "WaybillEventDate":  "15/05/2025",
+                             "WaybillEventTime":  "08:39:39",
+                             "WaybillEventDescription":  "Received In Branch East London",
+                             "WaybillEventBranch":  "East London",
+                             "WaybillEventId":  1282081681
+                         },
+                         {
+                             "WaybillEventDate":  "14/05/2025",
+                             "WaybillEventTime":  "03:16:20",
+                             "WaybillEventDescription":  "Out on Line Haul",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1280335034
+                         },
+                         {
+                             "WaybillEventDate":  "13/05/2025",
+                             "WaybillEventTime":  "22:02:14",
+                             "WaybillEventDescription":  "Received In Branch Elandsfontein",
+                             "WaybillEventBranch":  "Elandsfontein",
+                             "WaybillEventId":  1280189134
+                         },
+                         {
+                             "WaybillEventDate":  "13/05/2025",
+                             "WaybillEventTime":  "17:24:22",
+                             "WaybillEventDescription":  "Out on Line Haul",
+                             "WaybillEventBranch":  "Witbank",
+                             "WaybillEventId":  1279849132
+                         },
+                         {
+                             "WaybillEventDate":  "13/05/2025",
+                             "WaybillEventTime":  "12:39:29",
+                             "WaybillEventDescription":  "Scan into branch",
+                             "WaybillEventBranch":  "Witbank",
+                             "WaybillEventId":  1279482161
+                         },
+                         {
+                             "WaybillEventDate":  "13/05/2025",
+                             "WaybillEventTime":  "12:36:17",
+                             "WaybillEventDescription":  "In-house-client scan",
+                             "WaybillEventBranch":  "Witbank",
+                             "WaybillEventId":  1279482154
+                         },
+                         {
+                             "WaybillEventDate":  "12/05/2025",
+                             "WaybillEventTime":  "18:20:02",
+                             "WaybillEventDescription":  "Collection at Sender",
+                             "WaybillEventBranch":  "Witbank",
+                             "WaybillEventId":  1278387608
+                         },
+                         {
+                             "WaybillEventDate":  "12/05/2025",
+                             "WaybillEventTime":  "18:20:00",
+                             "WaybillEventDescription":  "Collection at Sender",
+                             "WaybillEventBranch":  "",
+                             "WaybillEventId":  1278394343
+                         },
+                         {
+                             "WaybillEventDate":  "12/05/2025",
+                             "WaybillEventTime":  "11:20:44",
+                             "WaybillEventDescription":  "Created waybill",
+                             "WaybillEventBranch":  "HostServer",
+                             "WaybillEventId":  1277788522
+                         }
+                     ],
+    "booking":  null
+}

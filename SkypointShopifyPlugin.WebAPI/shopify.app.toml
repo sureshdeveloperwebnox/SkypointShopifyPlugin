@@ -2,7 +2,7 @@
 
 client_id = "43cc9e72087b61c72649cbabcd052072"
 name = "SkyNet Online Shipping"
-application_url = "https://eboni-unprizable-discriminatingly.ngrok-free.dev"
+application_url = "https://dev-skynet-online.azurewebsites.net"
 embedded = false
 handle = "skypoint-shipping"
 
@@ -38,5 +38,5 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [ 
-  "https://eboni-unprizable-discriminatingly.ngrok-free.dev/api/shopify/auth"
+  "https://dev-skynet-online.azurewebsites.net/api/shopify/auth"
 ]

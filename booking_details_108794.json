@@ -1,0 +1,120 @@
+﻿{
+    "tracking":  null,
+    "details":  {
+                    "id":  "5ae70d21-5754-4f23-b3c4-817445c40622",
+                    "createAt":  "2026-07-08T10:20:55.888842",
+                    "user":  {
+                                 "id":  "59cb2dd7-be9c-497e-8122-155d7282d603",
+                                 "createAt":  "2026-07-02T13:29:24.373568",
+                                 "username":  "faropef162@lovadio.com",
+                                 "userType":  "USER",
+                                 "owner":  {
+                                               "id":  "3ad6e550-2cbe-43ba-a666-87b9dceaeb23",
+                                               "createAt":  "2026-07-02T13:29:24.367172",
+                                               "mobile":  "6565656565",
+                                               "firstName":  "sky",
+                                               "surname":  "net",
+                                               "mobileConfirmation":  {
+                                                                          "code":  "4690",
+                                                                          "confirmed":  true,
+                                                                          "confirmationTime":  "2026-07-02T13:29:56.220885",
+                                                                          "codeExpirationTime":  "2026-07-02T15:29:24.3622399",
+                                                                          "resendOtpCount":  null
+                                                                      },
+                                               "email":  "faropef162@lovadio.com",
+                                               "salesCode":  "SKYA001",
+                                               "businessName":  null,
+                                               "businessVat":  null,
+                                               "businessAddress":  null
+                                           },
+                                 "token":  null,
+                                 "role":  "CLIENT",
+                                 "permissions":  [
+                                                     "CLIENT_ALL"
+                                                 ],
+                                 "accountNo":  "FM103027",
+                                 "canAddStickers":  "INACTIVE",
+                                 "password":  "$2a$10$7gUaP2jw/qFbQbO9C88riuyEiO.Pn04.vi4Y/7GpXUqcQvZOACqEu",
+                                 "vatDetails":  null
+                             },
+                    "pickUpAddress":  "Rifle Range Road",
+                    "dropOffAddress":  "Rifle Range Road",
+                    "pickUpDate":  "08",
+                    "pickUpTime":  "13:50",
+                    "price":  75,
+                    "comment":  "@PickUp: Shopify Order #1096 @DropOff: No comment",
+                    "status":  "CREATED_WAYBILL",
+                    "skynetStatus":  "created waybill",
+                    "trackNo":  "DROP-108794",
+                    "province":  null,
+                    "destinationProvince":  null,
+                    "type":  "ROAD",
+                    "distance":  0,
+                    "dropOffPerson":  {
+                                          "id":  "f9a64983-4550-476b-a3bf-aafc2c47a4d4",
+                                          "createAt":  "2026-07-08T10:20:55.88686",
+                                          "firstName":  "Amlan Biswas",
+                                          "lastName":  "Biswas",
+                                          "phone":  "",
+                                          "base64Image":  null,
+                                          "email":  "sam@gmail.com",
+                                          "companyName":  " ",
+                                          "complex":  "",
+                                          "unitNo":  "",
+                                          "floor":  "",
+                                          "suburb":  "Johannesburg",
+                                          "city":  "Johannesburg South",
+                                          "state":  "Gauteng",
+                                          "zip":  "2000"
+                                      },
+                    "pickUpPerson":  {
+                                         "id":  "dea08856-28bc-47fe-89db-f3449055e904",
+                                         "createAt":  "2026-07-08T10:20:55.884654",
+                                         "firstName":  "Amlan Biswas",
+                                         "lastName":  "Biswas",
+                                         "phone":  "",
+                                         "base64Image":  null,
+                                         "email":  "sam@gmail.com",
+                                         "companyName":  " ",
+                                         "complex":  "",
+                                         "unitNo":  "",
+                                         "floor":  "",
+                                         "suburb":  "Johannesburg",
+                                         "city":  "Johannesburg South",
+                                         "state":  "Gauteng",
+                                         "zip":  "2000"
+                                     },
+                    "waybillResponse":  {
+                                            "waybillNumber":  "080040108840"
+                                        },
+                    "fromSuburb":  "Johannesburg",
+                    "toSuburb":  "Johannesburg",
+                    "pickUpPCode":  "2000",
+                    "dropOffPCode":  "2000",
+                    "parcelDimensions":  [
+                                             {
+                                                 "parcel_length":  10,
+                                                 "parcel_breadth":  10,
+                                                 "parcel_height":  10,
+                                                 "parcel_mass":  0.5,
+                                                 "parcel_reference":  "SKU-48793743491296",
+                                                 "parcel_description":  null,
+                                                 "parcel_trackNo":  null,
+                                                 "predefinedParcel":  null,
+                                                 "selected_parcel":  null
+                                             }
+                                         ],
+                    "isPaid":  true,
+                    "receiverPaying":  false,
+                    "exportDetails":  null,
+                    "importDetails":  null,
+                    "promoCode":  null,
+                    "promiseDateTimestamp":  "2026-07-09T10:20:55.888842",
+                    "cancellationReason":  null,
+                    "saIdNumber":  "",
+                    "shipmentType":  "",
+                    "wooCommerceOrderId":  null,
+                    "toCounterCode":  "",
+                    "toCounterName":  null
+                }
+}

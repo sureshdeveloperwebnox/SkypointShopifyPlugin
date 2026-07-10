@@ -613,5 +613,17 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
             return (null, null);
         }
+
+        /// <inheritdoc />
+        public Task<SkypointOrderResponse> PayOrderWithWalletAsync(string orderId)
+        {
+            _logger.LogInformation("PayOrderWithWalletAsync called for order {OrderId}", orderId);
+            // Wallet payment via Skypoint API not yet implemented
+            return Task.FromResult(new SkypointOrderResponse
+            {
+                Success = false,
+                Message = "Wallet payment is not yet supported in this version."
+            });
+        }
     }
 }
