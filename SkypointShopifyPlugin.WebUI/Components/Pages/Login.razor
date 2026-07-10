@@ -62,7 +62,7 @@
             <h2 class="form-welcome-title">Welcome back</h2>
             <p class="form-welcome-subtitle">Sign in to your SkyNet Online customer account to manage shipments and track parcels.</p>
 
-            <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
+            <EditForm Model="@loginModel" OnValidSubmit="HandleLogin" FormName="loginForm">
                 <DataAnnotationsValidator />
 
                 <div class="form-group-light">

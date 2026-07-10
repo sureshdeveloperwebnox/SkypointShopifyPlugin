@@ -71,9 +71,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 .Build();
         }
 
-        public async Task<LoginResponse> LoginAsync(LoginRequest request)
+        public async Task<LoginResponse> LoginAsync(LoginRequest request, string? baseUrl = null)
         {
-            var url = _settings.GetLoginUrl();
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}{_settings.LoginEndpoint}";
             _logger.LogInformation("Login request to {Url}", url);
 
             var content = new StringContent(
@@ -95,9 +96,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<LoginResponse> RegisterAsync(RegisterRequest request)
+        public async Task<LoginResponse> RegisterAsync(RegisterRequest request, string? baseUrl = null)
         {
-            var url = _settings.GetRegisterUrl();
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}{_settings.RegisterEndpoint}";
             _logger.LogInformation("Registration request to {Url}", url);
 
             var content = new StringContent(
@@ -119,9 +121,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<List<RateResponse>> GetRatesAsync(RateRequest request, string authToken)
+        public async Task<List<RateResponse>> GetRatesAsync(RateRequest request, string authToken, string? baseUrl = null)
         {
-            var url = _settings.GetRateQuoteUrl();
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}{_settings.RateEndpoint}";
             var payload = JsonSerializer.Serialize(request, _jsonOptions);
             _logger.LogInformation("Rate request to {Url} | payload: {Payload}", url, payload);
 
@@ -146,9 +149,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<BookingResponse> CreateBookingAsync(BookingRequest request, string authToken)
+        public async Task<BookingResponse> CreateBookingAsync(BookingRequest request, string authToken, string? baseUrl = null)
         {
-            var url = _settings.GetBookingUrl();
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}{_settings.BookingEndpoint}";
             var payload = JsonSerializer.Serialize(request, _jsonOptions);
             _logger.LogInformation("Booking request to {Url} | payload: {Payload}", url, payload);
 
@@ -173,7 +177,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<TrackingResponse> TrackBookingAsync(string trackNo, string authToken)
+        public async Task<TrackingResponse> TrackBookingAsync(string trackNo, string authToken, string? baseUrl = null)
         {
             if (string.IsNullOrEmpty(trackNo) || (trackNo.Length >= 13 && long.TryParse(trackNo, out _)))
             {
@@ -181,7 +185,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 throw new ArgumentException($"Invalid tracking number '{trackNo}'. Shopify order ID must not be sent.", nameof(trackNo));
             }
 
-            var url = _settings.GetTrackingUrl(trackNo);
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}{_settings.TrackingEndpoint}/{trackNo}";
             _logger.LogInformation("Tracking request to {Url}", url);
 
             return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
@@ -204,9 +209,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<PudoPointResponse> GetSelectedPudoPointAsync(string guid, string authToken)
+        public async Task<PudoPointResponse> GetSelectedPudoPointAsync(string guid, string authToken, string? baseUrl = null)
         {
-            var url = _settings.GetPudoSelectedUrl(guid);
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}{_settings.PudoEndpoint}/{guid}";
             _logger.LogInformation("Selected PUDO point request to {Url}", url);
 
             return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
@@ -235,7 +241,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<WaybillDownloadResponse> DownloadWaybillAsync(string waybillNumber, string authToken)
+        public async Task<WaybillDownloadResponse> DownloadWaybillAsync(string waybillNumber, string authToken, string? baseUrl = null)
         {
             if (string.IsNullOrEmpty(waybillNumber) || (waybillNumber.Length >= 13 && long.TryParse(waybillNumber, out _)))
             {
@@ -243,7 +249,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 throw new ArgumentException($"Invalid waybill number '{waybillNumber}'. Shopify order ID must not be sent.", nameof(waybillNumber));
             }
 
-            var url = _settings.GetWaybillDownloadUrl(waybillNumber);
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}/api/service/booking/download/waybill/{waybillNumber}";
             _logger.LogInformation("Waybill download request to {Url}", url);
 
             return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
@@ -267,9 +274,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<WaybillDownloadResponse> BulkLabelPrintAsync(List<string> bookingIds, string authToken)
+        public async Task<WaybillDownloadResponse> BulkLabelPrintAsync(List<string> bookingIds, string authToken, string? baseUrl = null)
         {
-            var url = _settings.GetBulkLabelPrintUrl();
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}/api/service/booking/bulk/label/printing";
             _logger.LogInformation("Bulk label print request to {Url} for {Count} bookings", url, bookingIds.Count);
 
             return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
@@ -296,7 +304,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<BookingResponse> GetBookingDetailsAsync(string bookingId, string authToken)
+        public async Task<BookingResponse> GetBookingDetailsAsync(string bookingId, string authToken, string? baseUrl = null)
         {
             if (string.IsNullOrEmpty(bookingId) || !Guid.TryParse(bookingId, out _))
             {
@@ -304,7 +312,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 throw new ArgumentException($"Invalid booking ID '{bookingId}'. Must be a valid GUID.", nameof(bookingId));
             }
 
-            var url = _settings.GetBookingDetailsUrl(bookingId);
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}/api/service/booking/{bookingId}";
             _logger.LogInformation("Booking details fetch request to {Url}", url);
 
             return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
@@ -327,7 +336,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             });
         }
 
-        public async Task<BookingResponse> ProcessBookingAsync(string trackNo, string authToken)
+        public async Task<BookingResponse> ProcessBookingAsync(string trackNo, string authToken, string? baseUrl = null)
         {
             if (string.IsNullOrEmpty(trackNo) || (trackNo.Length >= 13 && long.TryParse(trackNo, out _)))
             {
@@ -335,7 +344,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 throw new ArgumentException($"Invalid tracking number '{trackNo}'. Shopify order ID must not be sent.", nameof(trackNo));
             }
 
-            var url = _settings.GetProcessBookingUrl(trackNo);
+            var baseAddr = baseUrl ?? _settings.BaseUrl;
+            var url = $"{baseAddr}/api/service/booking/process/{trackNo}";
             _logger.LogInformation("Booking process request to {Url}", url);
 
             return await _resiliencePipeline.ExecuteAsync(async cancellationToken =>
@@ -379,5 +389,16 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
             return JsonSerializer.Deserialize<BookingResponse>(json, _jsonOptions) ?? new BookingResponse();
         }
+
+        public Task<LoginResponse> LoginAsync(LoginRequest request) => LoginAsync(request, null);
+        public Task<LoginResponse> RegisterAsync(RegisterRequest request) => RegisterAsync(request, null);
+        public Task<List<RateResponse>> GetRatesAsync(RateRequest request, string authToken) => GetRatesAsync(request, authToken, null);
+        public Task<BookingResponse> CreateBookingAsync(BookingRequest request, string authToken) => CreateBookingAsync(request, authToken, null);
+        public Task<TrackingResponse> TrackBookingAsync(string trackNo, string authToken) => TrackBookingAsync(trackNo, authToken, null);
+        public Task<PudoPointResponse> GetSelectedPudoPointAsync(string guid, string authToken) => GetSelectedPudoPointAsync(guid, authToken, null);
+        public Task<WaybillDownloadResponse> DownloadWaybillAsync(string waybillNumber, string authToken) => DownloadWaybillAsync(waybillNumber, authToken, null);
+        public Task<WaybillDownloadResponse> BulkLabelPrintAsync(List<string> bookingIds, string authToken) => BulkLabelPrintAsync(bookingIds, authToken, null);
+        public Task<BookingResponse> GetBookingDetailsAsync(string bookingId, string authToken) => GetBookingDetailsAsync(bookingId, authToken, null);
+        public Task<BookingResponse> ProcessBookingAsync(string trackNo, string authToken) => ProcessBookingAsync(trackNo, authToken, null);
     }
 }

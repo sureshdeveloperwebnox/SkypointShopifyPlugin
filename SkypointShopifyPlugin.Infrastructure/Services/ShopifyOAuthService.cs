@@ -120,7 +120,11 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 return false;
 
             // Remove protocol if present
-            shop = shop.Replace("https://", "").Replace("http://", "");
+            shop = shop.Replace("https://", "").Replace("http://", "").Trim().TrimEnd('/');
+            if (shop.EndsWith(".myshopify.co", StringComparison.OrdinalIgnoreCase))
+            {
+                shop += "m";
+            }
 
             // Basic validation: ends with .myshopify.com
             return shop.EndsWith(".myshopify.com", StringComparison.OrdinalIgnoreCase);

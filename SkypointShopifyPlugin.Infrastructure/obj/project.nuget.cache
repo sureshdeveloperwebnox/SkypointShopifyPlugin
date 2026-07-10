@@ -1,11 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "sfTOqJikLxM=",
+  "dgSpecHash": "YXG6hupzhi4=",
   "success": true,
   "projectFilePath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.Infrastructure\\SkypointShopifyPlugin.Infrastructure.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\sures\\.nuget\\packages\\mediatr\\14.1.0\\mediatr.14.1.0.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\mediatr.contracts\\2.0.1\\mediatr.contracts.2.0.1.nupkg.sha512",
+    "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.caching.abstractions\\9.0.0\\microsoft.extensions.caching.abstractions.9.0.0.nupkg.sha512",
+    "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.caching.memory\\9.0.0\\microsoft.extensions.caching.memory.9.0.0.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.configuration\\10.0.9\\microsoft.extensions.configuration.10.0.9.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\10.0.9\\microsoft.extensions.configuration.abstractions.10.0.9.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.configuration.binder\\10.0.9\\microsoft.extensions.configuration.binder.10.0.9.nupkg.sha512",

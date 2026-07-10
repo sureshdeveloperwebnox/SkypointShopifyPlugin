@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "P0qUShKvkwg=",
+  "dgSpecHash": "DZGC0rjz8EQ=",
   "success": true,
   "projectFilePath": "D:\\Office\\skynet\\SkypointShopifyPlugin\\SkypointShopifyPlugin.WebAPI\\SkypointShopifyPlugin.WebAPI.csproj",
   "expectedPackageFiles": [
@@ -9,6 +9,8 @@
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.aspnetcore.authentication.jwtbearer\\9.0.0\\microsoft.aspnetcore.authentication.jwtbearer.9.0.0.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.aspnetcore.openapi\\9.0.17\\microsoft.aspnetcore.openapi.9.0.17.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.apidescription.server\\6.0.5\\microsoft.extensions.apidescription.server.6.0.5.nupkg.sha512",
+    "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.caching.abstractions\\9.0.0\\microsoft.extensions.caching.abstractions.9.0.0.nupkg.sha512",
+    "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.caching.memory\\9.0.0\\microsoft.extensions.caching.memory.9.0.0.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.configuration\\10.0.9\\microsoft.extensions.configuration.10.0.9.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\10.0.9\\microsoft.extensions.configuration.abstractions.10.0.9.nupkg.sha512",
     "C:\\Users\\sures\\.nuget\\packages\\microsoft.extensions.configuration.binder\\10.0.9\\microsoft.extensions.configuration.binder.10.0.9.nupkg.sha512",
