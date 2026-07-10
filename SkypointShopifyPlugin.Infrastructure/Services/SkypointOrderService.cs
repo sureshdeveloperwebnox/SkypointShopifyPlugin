@@ -485,33 +485,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                             var rawJson = System.Text.Json.JsonSerializer.Serialize(bookingResponse);
                             _logger.LogInformation("Booking details response JSON: {Json}", rawJson);
                             
-                            string? fetchedWaybillNo = null;
-                            if (bookingResponse.WaybillResponse != null)
-                            {
-                                if (bookingResponse.WaybillResponse is System.Text.Json.JsonElement jsonEl && jsonEl.ValueKind == System.Text.Json.JsonValueKind.Object)
-                                {
-                                    if (jsonEl.TryGetProperty("waybillNumber", out var wbProp) && wbProp.ValueKind == System.Text.Json.JsonValueKind.String)
-                                    {
-                                        fetchedWaybillNo = wbProp.GetString();
-                                    }
-                                }
-                                else
-                                {
-                                    try
-                                    {
-                                        var serialized = System.Text.Json.JsonSerializer.Serialize(bookingResponse.WaybillResponse);
-                                        using var doc = System.Text.Json.JsonDocument.Parse(serialized);
-                                        if (doc.RootElement.TryGetProperty("waybillNumber", out var wbProp) && wbProp.ValueKind == System.Text.Json.JsonValueKind.String)
-                                        {
-                                            fetchedWaybillNo = wbProp.GetString();
-                                        }
-                                    }
-                                    catch
-                                    {
-                                        // Ignore
-                                    }
-                                }
-                            }
+                            string? fetchedWaybillNo = bookingResponse.WaybillNumber;
 
                             if (string.IsNullOrEmpty(fetchedWaybillNo) && bookingResponse.ParcelDimensions != null)
                             {
