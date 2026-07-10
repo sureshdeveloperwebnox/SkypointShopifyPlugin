@@ -50,6 +50,8 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         public string SaIdNumber { get; set; } = string.Empty;
         [JsonPropertyName("pickUpCountry")]
         public string PickUpCountry { get; set; } = string.Empty;
+        [JsonPropertyName("wooCommerceOrderId")]
+        public string? WooCommerceOrderId { get; set; }
     }
 
     public class DropOffPerson

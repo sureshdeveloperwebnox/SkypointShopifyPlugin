@@ -86,7 +86,13 @@ namespace SkypointShopifyPlugin.Core.Configuration
         /// <summary>Gets the full waybill download URL for a specific waybill number</summary>
         public string GetWaybillDownloadUrl(string waybillNumber) => $"{BaseUrl}/api/service/booking/download/waybill/{waybillNumber}";
 
+        /// <summary>Gets the bulk label printing URL</summary>
+        public string GetBulkLabelPrintUrl() => $"{BaseUrl}/api/service/booking/bulk/label/printing";
+
         /// <summary>Gets the full booking details URL for a specific booking ID</summary>
         public string GetBookingDetailsUrl(string bookingId) => $"{BaseUrl}/api/service/booking/{bookingId}";
+
+        /// <summary>Gets the full process booking / wallet pay URL for a specific track number</summary>
+        public string GetProcessBookingUrl(string trackNo) => $"{BaseUrl}/api/service/booking/process/{trackNo}";
     }
 }

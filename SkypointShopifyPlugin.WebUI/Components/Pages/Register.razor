@@ -147,10 +147,6 @@
                     <i class="fas fa-user-check mr-2"></i> @(isSubmitting ? "Creating Account..." : "Create my account")
                 </button>
 
-                <button type="button" class="btn-skynet-outline-red" @onclick="LoginAsGuest">
-                    <i class="fas fa-user-clock mr-2"></i> Continue as a Guest instead
-                </button>
-
                 <div style="text-align: center; margin-top: 2rem; font-size: 0.9rem; color: #64748b;">
                     Already have an account? <a href="@GetLoginUrl()" class="form-link-highlight">Sign in here &rarr;</a>
                 </div>

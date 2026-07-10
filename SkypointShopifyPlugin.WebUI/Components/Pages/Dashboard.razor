@@ -22,6 +22,10 @@
             
             <div class="msg" style="display: block; background: @bgColor; border: 1px solid @borderColor; color: @textColor; padding: 12px 18px; border-radius: 6px; margin-bottom: 2rem; position: relative;">
                 <strong>@(isSuccess ? "✓ Status: " : "✗ Alert: ")</strong> @carrierMessage
+                @if (reinstallRequired && !string.IsNullOrEmpty(reinstallUrl))
+                {
+                    <a href="@reinstallUrl" target="_top" style="background-color: #ef4444; color: white; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 0.8rem; margin-left: 10px; display: inline-block;">Reconnect Shopify</a>
+                }
                 <button type="button" @onclick="() => carrierMessage = null" style="position: absolute; right: 15px; top: 12px; background: transparent; border: none; font-size: 1.2rem; cursor: pointer; color: @textColor; line-height: 1;">&times;</button>
             </div>
         }
@@ -50,7 +54,7 @@
             <!-- Wallet Card -->
             <div style="background-color: #ff1e27; border-radius: 8px; padding: 1.2rem 1.5rem; color: white; box-shadow: 0 4px 12px rgba(255, 30, 39, 0.15); display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 5px solid #d30008;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.95;"><i class="fas fa-wallet" style="margin-right: 5px;"></i> Wallet Balance</div>
-                <div style="font-size: 1.8rem; font-weight: 900;">R 0</div>
+                <div style="font-size: 1.8rem; font-weight: 900;">R @statWalletBalance.ToString("0.##")</div>
             </div>
 
             <!-- Total Orders Card -->
@@ -68,59 +72,54 @@
             <!-- Created Waybill Card -->
             <div style="background: white; border-radius: 8px; padding: 1.2rem 1.5rem; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 4px solid #ff1e27;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #ff1e27;"><i class="fas fa-file-invoice" style="margin-right: 5px;"></i> Created Waybill</div>
-                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">@statCreatedWaybill</div>
             </div>
 
             <!-- Generated Waybill Card -->
             <div style="background: white; border-radius: 8px; padding: 1.2rem 1.5rem; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 4px solid #ff1e27;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #ff1e27;"><i class="fas fa-barcode" style="margin-right: 5px;"></i> Generated Waybill</div>
-                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">@statGeneratedWaybill</div>
             </div>
 
             <!-- In Transact Waybill Card -->
             <div style="background: white; border-radius: 8px; padding: 1.2rem 1.5rem; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 4px solid #ff1e27;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #ff1e27;"><i class="fas fa-exchange-alt" style="margin-right: 5px;"></i> In Transact Waybill</div>
-                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">@statInTransact</div>
             </div>
 
             <!-- Delivered Waybill Card -->
             <div style="background: white; border-radius: 8px; padding: 1.2rem 1.5rem; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 4px solid #198754;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #198754;"><i class="fas fa-check-circle" style="margin-right: 5px;"></i> Delivered Waybill</div>
-                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">@statDelivered</div>
             </div>
 
             <!-- Error Waybill Card -->
             <div style="background: white; border-radius: 8px; padding: 1.2rem 1.5rem; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 4px solid #f59e0b;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #f59e0b;"><i class="fas fa-exclamation-triangle" style="margin-right: 5px;"></i> Error Waybill</div>
-                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">@statError</div>
             </div>
             <!-- Cancelled Waybill Card -->
             <div style="background: white; border-radius: 8px; padding: 1.2rem 1.5rem; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: space-between; min-height: 100px; border-left: 4px solid #64748b;">
                 <div style="font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b;"><i class="fas fa-ban" style="margin-right: 5px;"></i> Cancelled Waybill</div>
-                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">0</div>
+                <div style="font-size: 1.8rem; font-weight: 900; color: #0f172a;">@statCancelled</div>
             </div>
         </div>
         <!-- Orders Title and Search Controls -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
             <h2 style="font-size: 1.6rem; font-weight: 800; color: #ff1e27; margin: 0;">Orders: @totalOrders</h2>
             <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                <select @bind="searchField" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.55rem 1rem; font-size: 0.9rem; color: #334155; font-weight: 600; outline: none;">
-                    <option value="Track No">Track No</option>
-                    <option value="Order No">Order No</option>
-                </select>
-                <input type="text" placeholder="Search booking" @bind="searchTerm" @bind:event="oninput" @onkeyup="HandleSearchKeyUp" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.55rem 1.2rem; font-size: 0.9rem; color: #334155; width: 220px; outline: none;" />
-                
-                <button @onclick="ApplySearch" class="btn-skynet-green" style="margin-top: 0; width: auto; padding: 0.55rem 1.5rem; border-radius: 6px; font-size: 0.9rem; font-weight: bold;">
-                    Search
-                </button>
-                <button style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.55rem 1.2rem; color: #334155; font-size: 0.9rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
-                    Export <i class="fas fa-caret-down"></i>
-                </button>
-                <button @onclick="ResetSearch" style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.55rem 1.2rem; color: #334155; font-size: 0.9rem; font-weight: 700; cursor: pointer;">
-                    Reset Search
-                </button>
-                <button class="btn-skynet-red" style="width: auto; padding: 0.55rem 1.5rem; border-radius: 6px; font-size: 0.9rem; font-weight: bold; background-color: #ff1e27;">
-                    Bulk Label Download
+                <button class="btn-skynet-red"
+                        style="width: auto; padding: 0.55rem 1.5rem; border-radius: 6px; font-size: 0.9rem; font-weight: bold; background-color: @(selectedBookingIds.Count == 0 ? "#94a3b8" : "#ff1e27"); cursor: @(selectedBookingIds.Count == 0 ? "not-allowed" : "pointer");"
+                        disabled="@(selectedBookingIds.Count == 0 || isBulkDownloading)"
+                        @onclick="BulkLabelDownload">
+                    @if (isBulkDownloading)
+                    {
+                        <i class="fas fa-spinner fa-spin" style="margin-right: 6px;"></i><span>Downloading...</span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-file-download" style="margin-right: 6px;"></i><span>Bulk Label Download @(selectedBookingIds.Count > 0 ? $"({selectedBookingIds.Count})" : "")</span>
+                    }
                 </button>
             </div>
         </div>
@@ -146,7 +145,11 @@
                     <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
                         <thead>
                             <tr style="background-color: #f8fafc; border-bottom: 1.5px solid #cbd5e1; color: #475569; font-weight: 800; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px;">
-                                <th style="padding: 1rem 1.2rem; width: 40px; text-align: center;"><input type="checkbox" style="accent-color: #ff1e27;" /></th>
+                                <th style="padding: 1rem 1.2rem; width: 40px; text-align: center;">
+                                    <input type="checkbox" style="accent-color: #ff1e27;"
+                                           checked="@IsAllEligibleSelected()"
+                                           @onchange="ToggleSelectAll" />
+                                </th>
                                 <th style="padding: 1rem 1.2rem;">Date Created</th>
                                 <th style="padding: 1rem 1.2rem;">Date Promised</th>
                                 <th style="padding: 1rem 1.2rem;">Order No</th>
@@ -165,7 +168,17 @@
                             {
                                 var currentOrder = order;
                                 <tr class="table-row-light" style="border-bottom: 1px solid #e2e8f0; color: #334155; cursor: pointer; transition: background 0.15s;" @onclick="() => ToggleSelectOrder(currentOrder)">
-                                    <td style="padding: 1.1rem 1.2rem; text-align: center;" @onclick:stopPropagation="true"><input type="checkbox" style="accent-color: #ff1e27;" /></td>
+                                    <td style="padding: 1.1rem 1.2rem; text-align: center;" @onclick:stopPropagation="true">
+                                        @{
+                                            var bookingId  = order.SkypointBookingId ?? "";
+                                            var isEligible = !string.IsNullOrEmpty(bookingId);
+                                        }
+                                        <input type="checkbox"
+                                               style="accent-color: #ff1e27; cursor: @(isEligible ? "pointer" : "not-allowed"); opacity: @(isEligible ? "1" : "0.3");"
+                                               disabled="@(!isEligible)"
+                                               checked="@selectedBookingIds.Contains(bookingId)"
+                                               @onchange="e => ToggleBulkSelect(bookingId, (bool)(e.Value ?? false))" />
+                                    </td>
                                     <td style="padding: 1.1rem 1.2rem;">@order.CreatedAt.ToString("dd-MM-yy")</td>
                                     <td style="padding: 1.1rem 1.2rem;">@order.CreatedAt.AddDays(1).ToString("dd-MM-yy")</td>
                                     <td style="padding: 1.1rem 1.2rem; font-weight: 700; color: #006bb7;">
@@ -445,10 +458,7 @@
     private string? token;
 
     // Carrier setup fields
-    private bool carrierLoading = true;
-    private bool carrierSuccess = false;
     private bool reinstallRequired = false;
-    private bool noToken = false;
     private string? carrierMessage;
     private string? reinstallUrl;
 
@@ -461,16 +471,27 @@
     private bool isDownloadingWaybill = false;
     private string? downloadingOrderId;
 
+    // Bulk label selection
+    private HashSet<string> selectedBookingIds = new();
+    private bool isBulkDownloading = false;
+
     // Pagination & Filtering
     private int currentPage = 1;
     private int pageSize = 10;
     private int totalOrders = 0;
     private int totalPages = 1;
     private string searchTerm = "";
-    private string searchField = "Track No";
-    private string dateRangeType = "Created Date";
     private string startDateStr = "";
     private string endDateStr = "";
+
+    // Dashboard Stats
+    private int statCreatedWaybill = 0;
+    private int statGeneratedWaybill = 0;
+    private int statInTransact = 0;
+    private int statDelivered = 0;
+    private int statError = 0;
+    private int statCancelled = 0;
+    private decimal statWalletBalance = 0;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -524,6 +545,7 @@
                 }
 
                 await LoadOrders();
+                await LoadStats();
             }
             catch
             {
@@ -534,7 +556,6 @@
 
     private async Task SetupCarrier()
     {
-        carrierLoading = true;
         StateHasChanged();
 
         try
@@ -551,19 +572,11 @@
                 if (data != null)
                 {
                     carrierMessage = data.Message ?? data.Error;
-                    
-                    if (data.Success)
-                    {
-                        carrierSuccess = true;
-                    }
-                    else if (data.Status == "reinstall_required")
+
+                    if (data.Status == "reinstall_required")
                     {
                         reinstallRequired = true;
                         reinstallUrl = data.InstallUrl ?? $"api/shopify?shop={Uri.EscapeDataString(Shop!)}";
-                    }
-                    else if (data.Status == "no_token")
-                    {
-                        noToken = true;
                     }
                 }
             }
@@ -578,7 +591,6 @@
         }
         finally
         {
-            carrierLoading = false;
             StateHasChanged();
         }
     }
@@ -595,6 +607,174 @@
         public string? SalesCode { get; set; }
     }
 
+    // ── Stats API ──────────────────────────────────────────────────────────────
+
+    public class BookingStatsResponse
+    {
+        [JsonPropertyName("totalOrders")]
+        public int TotalOrders { get; set; }
+        [JsonPropertyName("createdWaybill")]
+        public int CreatedWaybill { get; set; }
+        [JsonPropertyName("generatedWaybill")]
+        public int GeneratedWaybill { get; set; }
+        [JsonPropertyName("inTransactWaybill")]
+        public int InTransactWaybill { get; set; }
+        [JsonPropertyName("deliveredWaybill")]
+        public int DeliveredWaybill { get; set; }
+        [JsonPropertyName("errorWaybill")]
+        public int ErrorWaybill { get; set; }
+        [JsonPropertyName("cancelledWaybill")]
+        public int CancelledWaybill { get; set; }
+        [JsonPropertyName("walletBalance")]
+        public decimal WalletBalance { get; set; }
+    }
+
+    private async Task LoadStats()
+    {
+        if (user == null || string.IsNullOrEmpty(user.Id)) return;
+
+        try
+        {
+            var body = new
+            {
+                oid = user.Id,
+                field = "createBy",
+                sort = "ASC",
+                page = pageSize,
+                offset = 0,
+                startDate = (string?)null,
+                endDate = (string?)null,
+                items = new[] { new { field = "waybill", searchValue = (string?)null } },
+                searchType = "createAt"
+            };
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"https://uat.skypoint.online/api/service/booking/stats/{user.Id}");
+
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            request.Content = JsonContent.Create(body);
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadFromJsonAsync<BookingStatsResponse>(
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (data != null)
+                {
+                    statCreatedWaybill   = data.CreatedWaybill;
+                    statGeneratedWaybill = data.GeneratedWaybill;
+                    statInTransact       = data.InTransactWaybill;
+                    statDelivered        = data.DeliveredWaybill;
+                    statError            = data.ErrorWaybill;
+                    statCancelled        = data.CancelledWaybill;
+                    statWalletBalance    = data.WalletBalance;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch
+        {
+            // Stats load failure is non-critical; silently ignore
+        }
+    }
+
+    // ── Bulk Label Download ────────────────────────────────────────────────────
+
+    private bool IsAllEligibleSelected()
+    {
+        var eligible = orders
+            .Where(o => !string.IsNullOrEmpty(o.SkypointBookingId))
+            .Select(o => o.SkypointBookingId!)
+            .ToList();
+        return eligible.Count > 0 && eligible.All(id => selectedBookingIds.Contains(id));
+    }
+
+    private void ToggleBulkSelect(string bookingId, bool selected)
+    {
+        if (string.IsNullOrEmpty(bookingId)) return;
+        if (selected) selectedBookingIds.Add(bookingId);
+        else selectedBookingIds.Remove(bookingId);
+        StateHasChanged();
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        var check = (bool)(e.Value ?? false);
+        var eligible = orders
+            .Where(o => !string.IsNullOrEmpty(o.SkypointBookingId))
+            .Select(o => o.SkypointBookingId!);
+
+        if (check) foreach (var id in eligible) selectedBookingIds.Add(id);
+        else        foreach (var id in eligible) selectedBookingIds.Remove(id);
+
+        StateHasChanged();
+    }
+
+    public class BulkLabelResponse
+    {
+        [JsonPropertyName("fileId")]    public string?  FileId          { get; set; }
+        [JsonPropertyName("downloadUrl")] public string? DownloadUrl    { get; set; }
+        [JsonPropertyName("fileStream")] public string?  FileStream     { get; set; }
+        [JsonPropertyName("fileName")]  public string?  FileName        { get; set; }
+        [JsonPropertyName("applicationType")] public string? ApplicationType { get; set; }
+    }
+
+    private async Task BulkLabelDownload()
+    {
+        if (selectedBookingIds.Count == 0 || isBulkDownloading) return;
+
+        isBulkDownloading = true;
+        StateHasChanged();
+
+        try
+        {
+            var ids = selectedBookingIds.ToList();
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/skypoint/orders/bulk/label");
+
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+            request.Content = JsonContent.Create(ids);
+            var response = await Http.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadFromJsonAsync<BulkLabelResponse>(
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (data != null && !string.IsNullOrEmpty(data.FileStream))
+                {
+                    var fileName = data.FileName ?? "Bulk_Waybills.pdf";
+                    var mimeType = data.ApplicationType ?? "application/pdf";
+                    await JSRuntime.InvokeVoidAsync("downloadBase64File", data.FileStream, fileName, mimeType);
+                    selectedBookingIds.Clear();
+                }
+                else
+                {
+                    carrierMessage = "Bulk label download: no file data returned.";
+                }
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                carrierMessage = $"Bulk label download failed ({(int)response.StatusCode}): {err}";
+            }
+        }
+        catch (Exception ex)
+        {
+            carrierMessage = $"Bulk label download error: {ex.Message}";
+        }
+        finally
+        {
+            isBulkDownloading = false;
+            StateHasChanged();
+        }
+    }
     public class CarrierSetupResponse
     {
         public bool Success { get; set; }

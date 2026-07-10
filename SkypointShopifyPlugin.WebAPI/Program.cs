@@ -157,13 +157,13 @@ static void LoadAppConfig(IConfiguration configuration)
         // Load Shopify configuration
         if (config.TryGetProperty("shopify", out var shopify))
         {
-            if (shopify.TryGetProperty("clientId", out var clientId) && clientId.ValueKind != JsonValueKind.Null)
+            if (shopify.TryGetProperty("clientId", out var clientId) && clientId.ValueKind != JsonValueKind.Null && !string.IsNullOrWhiteSpace(clientId.GetString()))
                 configuration["Shopify:ClientId"] = clientId.GetString();
-            if (shopify.TryGetProperty("clientSecret", out var clientSecret) && clientSecret.ValueKind != JsonValueKind.Null)
+            if (shopify.TryGetProperty("clientSecret", out var clientSecret) && clientSecret.ValueKind != JsonValueKind.Null && !string.IsNullOrWhiteSpace(clientSecret.GetString()))
                 configuration["Shopify:ClientSecret"] = clientSecret.GetString();
-            if (shopify.TryGetProperty("redirectUri", out var redirectUri) && redirectUri.ValueKind != JsonValueKind.Null)
+            if (shopify.TryGetProperty("redirectUri", out var redirectUri) && redirectUri.ValueKind != JsonValueKind.Null && !string.IsNullOrWhiteSpace(redirectUri.GetString()))
                 configuration["Shopify:RedirectUri"] = redirectUri.GetString();
-            if (shopify.TryGetProperty("webhookSecret", out var webhookSecret) && webhookSecret.ValueKind != JsonValueKind.Null)
+            if (shopify.TryGetProperty("webhookSecret", out var webhookSecret) && webhookSecret.ValueKind != JsonValueKind.Null && !string.IsNullOrWhiteSpace(webhookSecret.GetString()))
                 configuration["Shopify:WebhookSecret"] = webhookSecret.GetString();
         }
 

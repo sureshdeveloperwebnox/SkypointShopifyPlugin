@@ -10,6 +10,8 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
         {
+            services.AddMemoryCache();
+
             services.Configure<SkypointApiSettings>(options =>
             {
                 configuration.GetSection(SkypointApiSettings.SectionName).Bind(options);
@@ -36,6 +38,11 @@ namespace SkypointShopifyPlugin.Infrastructure.DependencyInjection
             });
 
             services.AddHttpClient<IShopifyAdminService, ShopifyAdminService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
+
+            services.AddHttpClient<ISkypointSettingsService, SkypointSettingsService>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
             });

@@ -98,12 +98,11 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             }
 
             shop = NormalizeShopDomain(shop);
-            _logger.LogInformation("Install request from shop: {Shop}", shop);
             try
             {
                 var redirectUri = BuildRedirectUri();
                 var installUrl = _oauthService.GetInstallUrl(shop, redirectUri);
-                return Redirect(installUrl);
+                return RedirectTop(installUrl);
             }
             catch (ArgumentException ex)
             {
@@ -140,12 +139,14 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 }
 
                 // Exchange code for access token
-                var accessToken = await _oauthService.ExchangeCodeForAccessTokenAsync(shop, code);
-                if (string.IsNullOrEmpty(accessToken))
+                var tokenResponse = await _oauthService.ExchangeCodeForAccessTokenAsync(shop, code);
+                if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.access_token))
                     return StatusCode(500, new { error = "Failed to obtain access token" });
 
+                var accessToken = tokenResponse.access_token;
+
                 // Persist token immediately — in-memory cache
-                _shopTokenStore.SaveToken(shop, accessToken);
+                _shopTokenStore.SaveToken(shop, accessToken, tokenResponse.refresh_token, tokenResponse.expires_in);
 
                 // Register carrier service and webhooks in background — don't block the redirect.
                 // Build carrier URL from the public ngrok/production base URL.
@@ -155,6 +156,14 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 {
                     try
                     {
+                        // Register metafield definitions
+                        await _shopifyAdminService.RegisterMetafieldDefinitionsAsync(shop, accessToken);
+                        _logger.LogInformation("Metafields registered automatically for {Shop}", shop);
+
+                        // Populate default settings values
+                        await _shopifyAdminService.PopulateDefaultSettingsAsync(shop, accessToken);
+                        _logger.LogInformation("Default metafield values populated automatically for {Shop}", shop);
+
                         // Register carrier service
                         await _shopifyAdminService.RegisterAndAssignCarrierServiceAsync(shop, accessToken, carrierUrl);
                         
@@ -243,6 +252,20 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
             var publicBase = BuildPublicBaseUrl();
             var carrierServiceUrl = $"{publicBase}/api/carrier/rates?shop={Uri.EscapeDataString(shop)}";
 
+            // Register metafield definitions
+            try
+            {
+                await _shopifyAdminService.RegisterMetafieldDefinitionsAsync(shop, accessToken);
+                _logger.LogInformation("Metafields registered/synced for {Shop}", shop);
+
+                await _shopifyAdminService.PopulateDefaultSettingsAsync(shop, accessToken);
+                _logger.LogInformation("Default metafield values populated automatically for {Shop}", shop);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Metafields registration failed for {Shop}", shop);
+            }
+
             // Register webhooks automatically
             try
             {
@@ -316,11 +339,19 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                || message.Contains("unrecognized login", StringComparison.OrdinalIgnoreCase);
 
         private static string NormalizeShopDomain(string shop)
-            => shop.Replace("https://", "", StringComparison.OrdinalIgnoreCase)
-                   .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
-                   .Trim()
-                   .TrimEnd('/')
-                   .ToLowerInvariant();
+        {
+            if (string.IsNullOrEmpty(shop)) return "";
+            var normalized = shop.Replace("https://", "", StringComparison.OrdinalIgnoreCase)
+                                 .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
+                                 .Trim()
+                                 .TrimEnd('/')
+                                 .ToLowerInvariant();
+            if (normalized.EndsWith(".myshopify.co", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized += "m";
+            }
+            return normalized;
+        }
 
         /// <summary>
         /// Webhook endpoint for orders/create
@@ -512,6 +543,24 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         public static BookingRequest MapShopifyOrderToSkypointBooking(ShopifyOrderWebhook shopifyOrder, string skypointUserId, IConfiguration configuration)
         {
             return SkypointOrderMapper.MapShopifyOrderToSkypointBooking(shopifyOrder, skypointUserId, configuration);
+        }
+
+        private ContentResult RedirectTop(string url)
+        {
+            var html = $@"
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Redirecting...</title>
+                    <script type='text/javascript'>
+                        window.top.location.href = '{url}';
+                    </script>
+                </head>
+                <body>
+                    <p>Redirecting to authorize... If you are not redirected, <a href='{url}' target='_top'>click here</a>.</p>
+                </body>
+                </html>";
+            return Content(html, "text/html");
         }
     }
 }

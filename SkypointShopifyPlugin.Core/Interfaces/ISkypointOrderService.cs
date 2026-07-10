@@ -54,6 +54,11 @@ namespace SkypointShopifyPlugin.Core.Interfaces
         Task<bool> SyncOrderStatusAsync(string orderId);
 
         /// <summary>
+        /// Process payment / process booking via wallet in Skypoint API
+        /// </summary>
+        Task<SkypointOrderResponse> PayOrderWithWalletAsync(string orderId);
+
+        /// <summary>
         /// Download waybill file details
         /// </summary>
         Task<WaybillDownloadResponse?> DownloadWaybillAsync(string orderId);
