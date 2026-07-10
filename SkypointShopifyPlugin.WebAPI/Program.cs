@@ -10,9 +10,17 @@ using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure logging to clear default providers (which includes Windows EventLog) to prevent permission/disposed exceptions on Windows console runs.
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+builder.Logging.AddEventSourceLogger();
+
 // Standard ASP.NET Core config chain:
 //   appsettings.json → appsettings.{env}.json → Environment variables → Command-line
 // Environment variables override appsettings.json, e.g. set Shopify__ClientId in production.
+builder.Configuration.SetBasePath(Directory.GetCurrentDirectory());
+builder.Configuration.AddJsonFile("local.settings.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddInMemoryCollection(LoadEnvFiles(
     Path.Combine(Directory.GetCurrentDirectory(), ".env"),
     Path.Combine(builder.Environment.ContentRootPath, ".env"),

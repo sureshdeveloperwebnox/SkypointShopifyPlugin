@@ -1,0 +1,14 @@
+api_version = "2026-04"
+
+[[extensions]]
+uid = "adb5092c-9667-69c1-5bc4-65b6a3fdc1b9c85b051b"
+type = "ui_extension"
+name = "pudo-selector"
+handle = "pudo-selector"
+
+[[extensions.targeting]]
+module = "./src/index.jsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+network_access = true
