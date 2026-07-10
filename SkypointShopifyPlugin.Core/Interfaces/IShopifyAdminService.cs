@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using SkypointShopifyPlugin.Core.DTOs.Shopify;
 
 namespace SkypointShopifyPlugin.Core.Interfaces
 {
@@ -28,6 +29,9 @@ namespace SkypointShopifyPlugin.Core.Interfaces
             string? pudoCode = null,
             string? pudoName = null,
             string? pudoProvider = null);
+        Task<(bool success, string message)> RegisterMetafieldDefinitionsAsync(string shopDomain, string accessToken);
+        Task<bool> PopulateDefaultSettingsAsync(string shopDomain, string accessToken);
+        Task<ProductDimension?> GetProductDimensionsAsync(string shopDomain, string accessToken, string productId);
     }
 }
 

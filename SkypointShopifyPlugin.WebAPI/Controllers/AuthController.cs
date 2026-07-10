@@ -69,7 +69,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                     _logger.LogInformation("Skypoint token cached for shop: {Shop}", shop);
                 }
 
-                var jwtToken = GenerateLocalJwtToken(request.Username, loginResponse.Role ?? "client", loginResponse.Id ?? "", shop);
+                var jwtToken = GenerateLocalJwtToken(request.Username, loginResponse.Role ?? "client", loginResponse.Id ?? "", shop, loginResponse.Token.TokenValue);
 
                 _logger.LogInformation("Login successful for: {Username}", request.Username);
 
@@ -164,7 +164,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
         [HttpPost("logout")]
         public IActionResult Logout() => Ok(new { success = true });
 
-        private string GenerateLocalJwtToken(string username, string role, string userId, string? shop)
+        private string GenerateLocalJwtToken(string username, string role, string userId, string? shop, string? skypointToken = null)
         {
             var encryptionKey = _configuration["EncryptionKey"] ?? Environment.GetEnvironmentVariable("ENCRYPTION_KEY") ?? "SkypointShopifyPluginDefaultSecretKey32BytesForSigningTokens!";
             byte[] jwtKeyBytes;
@@ -187,7 +187,10 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 claims.Add(new System.Security.Claims.Claim("shop", shop));
             }
 
-            var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
+            if (!string.IsNullOrEmpty(skypointToken))
+            {
+                claims.Add(new System.Security.Claims.Claim("skypoint_token", skypointToken));
+            }            var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
                 claims: claims,
                 expires: DateTime.UtcNow.AddDays(7),
                 signingCredentials: creds

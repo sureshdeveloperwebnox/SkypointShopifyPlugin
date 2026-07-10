@@ -230,7 +230,7 @@ namespace SkypointShopifyPlugin.Tests
         public async Task SkypointOrderService_DownloadWaybillAsync_ReturnsNull_WhenApiFails()
         {
             const string orderId = "order-002";
-            const string trackNo = "DROP-108774";
+            const string trackNo = "080040108774";
             const string vendorId = "test-vendor";
 
             var order = new SkypointOrder

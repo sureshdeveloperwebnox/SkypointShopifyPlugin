@@ -76,6 +76,11 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             {
                 var json = File.ReadAllText(filePath);
                 var order = JsonSerializer.Deserialize<SkypointOrder>(json);
+                if (order != null && !string.IsNullOrEmpty(order.SkypointBookingId) && !Guid.TryParse(order.SkypointBookingId, out _))
+                {
+                    _logger.LogWarning("Cleaned up invalid SkypointBookingId '{BookingId}' (not a GUID) for order {OrderId}", order.SkypointBookingId, orderId);
+                    order.SkypointBookingId = null;
+                }
                 return order;
             }
         }
@@ -229,7 +234,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             var order = await GetOrderByIdAsync(orderId);
             if (order != null)
             {
-                order.SkypointBookingId = bookingId;
+                if (!string.IsNullOrEmpty(bookingId) && Guid.TryParse(bookingId, out _) && bookingId != orderId)
+                {
+                    order.SkypointBookingId = bookingId;
+                }
                 order.SkypointTrackNo = trackNo;
                 order.SkypointStatus = status;
                 order.Status = "processing";
@@ -259,6 +267,10 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                         var order = JsonSerializer.Deserialize<SkypointOrder>(json);
                         if (order != null)
                         {
+                            if (!string.IsNullOrEmpty(order.SkypointBookingId) && !Guid.TryParse(order.SkypointBookingId, out _))
+                            {
+                                order.SkypointBookingId = null;
+                            }
                             orders.Add(order);
                         }
                     }

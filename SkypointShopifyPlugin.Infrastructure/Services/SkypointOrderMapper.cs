@@ -45,15 +45,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 pickupPCode = MapPostalCode(pickupPCode, fromSuburb, configuration);
                 fromSuburb = MapSuburb(fromSuburb, pickupPCode, configuration);
                 
-                if (string.IsNullOrEmpty(order.ToCounterCode))
-                {
-                    dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
-                    toSuburb = MapSuburb(toSuburb, dropOffPCode, configuration);
-                }
-                else
-                {
-                    dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
-                }
+                dropOffPCode = MapPostalCode(dropOffPCode, toSuburb, configuration);
+                toSuburb = MapSuburb(toSuburb, dropOffPCode, configuration);
             }
 
             return new BookingRequest
@@ -111,7 +104,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 ToCounterCode = FirstNonEmpty(order.ToCounterCode, string.Empty),
                 ToCounterName = FirstNonEmpty(order.ToCounterName, string.Empty),
                 SaIdNumber = string.Empty,
-                PickUpCountry = FirstNonEmpty(billingAddress?.Country, string.Empty)
+                PickUpCountry = FirstNonEmpty(billingAddress?.Country, string.Empty),
+                WooCommerceOrderId = order.Id
             };
         }
 
@@ -175,7 +169,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
 
             var fromSuburb = MapSuburb(FirstNonEmpty(billingAddress?.city, " "), pickupPCode, configuration);
             var toSuburb = isDtc
-                ? FirstNonEmpty(pudoCity, shippingAddress?.city, " ")
+                ? MapSuburb(FirstNonEmpty(pudoCity, shippingAddress?.city, " "), dropOffPCode, configuration)
                 : MapSuburb(FirstNonEmpty(shippingAddress?.city, " "), dropOffPCode, configuration);
 
             return new BookingRequest
@@ -233,7 +227,8 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 ToCounterCode = toCounterCode,
                 ToCounterName = toCounterName,
                 SaIdNumber = string.Empty,
-                PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty)
+                PickUpCountry = FirstNonEmpty(billingAddress?.country, string.Empty),
+                WooCommerceOrderId = shopifyOrder.id.ToString()
             };
         }
 
@@ -242,17 +237,27 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
         /// </summary>
         public static void UpdateWithBookingResponse(SkypointOrder order, BookingResponse bookingResponse)
         {
-            order.SkypointBookingId = bookingResponse.Id;
-            order.SkypointTrackNo = bookingResponse.TrackNo;
-            // Extract the actual Skynet waybill barcode number from the first parcel dimension.
-            // This is the number required by the waybill download API (e.g. 080040106215),
-            // distinct from the booking reference TrackNo (e.g. DROP-108768).
-            var waybillNo = bookingResponse.ParcelDimensions
-                ?.FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
-                ?.ParcelTrackNo;
+            if (!string.IsNullOrEmpty(bookingResponse.Id) && Guid.TryParse(bookingResponse.Id, out _))
+                order.SkypointBookingId = bookingResponse.Id;
+            if (!string.IsNullOrEmpty(bookingResponse.TrackNo))
+                order.SkypointTrackNo = bookingResponse.TrackNo;
+            
+            // Extract the waybill barcode: WaybillResponse is now a strongly-typed DTO
+            string? waybillNo = bookingResponse.WaybillNumber;
+
+            // Fallback: Extract from the first parcel dimension
+            if (string.IsNullOrEmpty(waybillNo) && bookingResponse.ParcelDimensions != null)
+            {
+                waybillNo = bookingResponse.ParcelDimensions
+                    ?.FirstOrDefault(p => !string.IsNullOrEmpty(p.ParcelTrackNo))
+                    ?.ParcelTrackNo;
+            }
+
             if (!string.IsNullOrEmpty(waybillNo))
                 order.SkypointWaybillNo = waybillNo;
+                
             order.SkypointStatus = bookingResponse.Status;
+            order.IsPaid = bookingResponse.IsPaid;
             order.Status = "processing";
             order.UpdatedAt = DateTime.UtcNow;
         }
@@ -343,7 +348,7 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     return mappedCode;
             }
 
-            if (code.StartsWith("2") || suburb?.Contains("Johannesburg", StringComparison.OrdinalIgnoreCase) == true)
+            if (code.StartsWith("2") || code.StartsWith("1") || suburb?.Contains("Johannesburg", StringComparison.OrdinalIgnoreCase) == true)
                 return configuration["Skypoint:PostalCodeMappings:Johannesburg"] ?? "2000";
 
             if (code.StartsWith("0") || suburb?.Contains("Pretoria", StringComparison.OrdinalIgnoreCase) == true)

@@ -2,7 +2,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Memory;
 using SkypointShopifyPlugin.Core.Interfaces;
+using SkypointShopifyPlugin.Core.DTOs.Shopify;
 
 namespace SkypointShopifyPlugin.Infrastructure.Services
 {
@@ -10,11 +13,15 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
     {
         private readonly HttpClient _httpClient;
         private readonly ILogger<ShopifyAdminService> _logger;
+        private readonly IConfiguration _configuration;
+        private readonly IMemoryCache _memoryCache;
 
-        public ShopifyAdminService(HttpClient httpClient, ILogger<ShopifyAdminService> logger)
+        public ShopifyAdminService(HttpClient httpClient, IConfiguration configuration, ILogger<ShopifyAdminService> logger, IMemoryCache memoryCache)
         {
             _httpClient = httpClient;
+            _configuration = configuration;
             _logger = logger;
+            _memoryCache = memoryCache;
         }
 
         public async Task<bool> RegisterCarrierServiceAsync(string shopDomain, string accessToken, string carrierServiceUrl)
@@ -370,13 +377,55 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 var carrierGid = $"gid://shopify/DeliveryCarrierService/{carrierId}";
 
                 // Get all delivery profiles and their zones
-                var profilesQuery = new StringContent(
-                    "{\"query\":\"{ deliveryProfiles(first:10){ edges{ node{ id profileLocationGroups{ locationGroupZones(first:20){ edges{ node{ zone{ id name } } } } } } } } }\"}",
-                    Encoding.UTF8, "application/json");
+                var queryObj = new
+                {
+                    query = @"
+                        query {
+                          deliveryProfiles(first: 10) {
+                            edges {
+                              node {
+                                id
+                                name
+                                profileLocationGroups {
+                                  locationGroup {
+                                    id
+                                  }
+                                  locationGroupZones(first: 20) {
+                                    edges {
+                                      node {
+                                        zone {
+                                          id
+                                          name
+                                          countries {
+                                            code {
+                                              countryCode
+                                            }
+                                          }
+                                        }
+                                        methodDefinitions(first: 20) {
+                                          edges {
+                                            node {
+                                              name
+                                              active
+                                              rateProvider {
+                                                __typename
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }"
+                };
 
                 var profReq = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
                 profReq.Headers.Add("X-Shopify-Access-Token", accessToken);
-                profReq.Content = profilesQuery;
+                profReq.Content = new StringContent(JsonSerializer.Serialize(queryObj), Encoding.UTF8, "application/json");
                 var profResp = await _httpClient.SendAsync(profReq);
                 var profBody = await profResp.Content.ReadAsStringAsync();
                 _logger.LogInformation("Delivery profiles: {Body}", profBody);
@@ -392,37 +441,89 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     if (string.IsNullOrEmpty(profileId)) continue;
 
                     var locationGroups = profileEdge?["node"]?["profileLocationGroups"]?.AsArray();
-                    if (locationGroups == null) continue;
+                    if (locationGroups == null || locationGroups.Count == 0) continue;
+
+                    // Check if *any* location group in this profile has a zone covering ZA
+                    bool zaZoneExistsInProfile = false;
+                    string? zaZoneId = null;
+                    string? zaLocationGroupId = null;
+                    bool hasSkypointAlready = false;
 
                     foreach (var lg in locationGroups)
                     {
+                        var locationGroupId = lg?["locationGroup"]?["id"]?.ToString();
+                        if (string.IsNullOrEmpty(locationGroupId)) continue;
+
                         var zoneEdges = lg?["locationGroupZones"]?["edges"]?.AsArray();
                         if (zoneEdges == null) continue;
 
                         foreach (var zoneEdge in zoneEdges)
                         {
-                            var zoneId = zoneEdge?["node"]?["zone"]?["id"]?.ToString();
-                            if (string.IsNullOrEmpty(zoneId)) continue;
-
-                            var mutation = $"{{\"query\":\"mutation {{ deliveryProfileUpdate(id: \\\"{profileId}\\\", profile: {{ locationGroupsToUpdate: [{{ zonesToUpdate: [{{ id: \\\"{zoneId}\\\", methodDefinitionsToCreate: [{{ name: \\\"Skypoint Shipping\\\", description: \\\"Live rates by Skypoint\\\", active: true, rateProvider: {{ carrierService: {{ id: \\\"{carrierGid}\\\" }} }} }}] }}] }}] }}) {{ profile {{ id }} userErrors {{ field message }} }} }}\"}}";
-
-                            var mutReq = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
-                            mutReq.Headers.Add("X-Shopify-Access-Token", accessToken);
-                            mutReq.Content = new StringContent(mutation, Encoding.UTF8, "application/json");
-                            var mutResp = await _httpClient.SendAsync(mutReq);
-                            var mutBody = await mutResp.Content.ReadAsStringAsync();
-
-                            var mutJson = JsonNode.Parse(mutBody);
-                            var userErrors = mutJson?["data"]?["deliveryProfileUpdate"]?["userErrors"]?.AsArray();
-                            if (userErrors == null || userErrors.Count == 0)
+                            var zoneNode = zoneEdge?["node"]?["zone"];
+                            var countries = zoneNode?["countries"]?.AsArray();
+                            bool isZaZone = false;
+                            if (countries != null)
                             {
-                                _logger.LogInformation("Assigned Skypoint Shipping to zone {Zone}", zoneId);
-                                assigned++;
+                                foreach (var country in countries)
+                                {
+                                    var code = country?["code"]?["countryCode"]?.ToString();
+                                    if (code == "ZA")
+                                    {
+                                        isZaZone = true;
+                                        break;
+                                    }
+                                }
                             }
-                            else
+
+                            if (isZaZone)
                             {
-                                _logger.LogWarning("Could not assign to zone {Zone}: {Errors}", zoneId, mutBody);
+                                zaZoneExistsInProfile = true;
+                                zaZoneId = zoneNode?["id"]?.ToString();
+                                zaLocationGroupId = locationGroupId;
+
+                                // check if Skypoint is already there
+                                var methodEdges = zoneEdge?["node"]?["methodDefinitions"]?["edges"]?.AsArray();
+                                if (methodEdges != null)
+                                {
+                                    foreach (var methodEdge in methodEdges)
+                                    {
+                                        var methodName = methodEdge?["node"]?["name"]?.ToString();
+                                        if (methodName == "Skypoint Shipping")
+                                        {
+                                            hasSkypointAlready = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                break;
                             }
+                        }
+                        if (zaZoneExistsInProfile) break;
+                    }
+
+                    if (zaZoneExistsInProfile)
+                    {
+                        if (!hasSkypointAlready && !string.IsNullOrEmpty(zaZoneId) && !string.IsNullOrEmpty(zaLocationGroupId))
+                        {
+                            _logger.LogInformation("South Africa zone exists ({ZoneId}) in profile {ProfileId}, but Skypoint Shipping not assigned. Assigning...", zaZoneId, profileId);
+                            var updated = await UpdateProfileZoneAsync(graphqlUrl, accessToken, profileId, zaLocationGroupId, zaZoneId, carrierGid);
+                            if (updated) assigned++;
+                        }
+                        else
+                        {
+                            _logger.LogInformation("South Africa zone already has Skypoint Shipping assigned in profile {ProfileId}.", profileId);
+                        }
+                    }
+                    else
+                    {
+                        // Get the first location group ID of the profile
+                        var firstLg = locationGroups.First();
+                        var locationGroupId = firstLg?["locationGroup"]?["id"]?.ToString();
+                        if (!string.IsNullOrEmpty(locationGroupId))
+                        {
+                            _logger.LogInformation("South Africa zone does not exist in profile {ProfileId}. Creating new zone under location group {LocationGroupId}...", profileId, locationGroupId);
+                            var created = await CreateProfileZoneAsync(graphqlUrl, accessToken, profileId, locationGroupId, carrierGid);
+                            if (created) assigned++;
                         }
                     }
                 }
@@ -432,6 +533,187 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             {
                 _logger.LogWarning(ex, "Error assigning carrier to zones for {Shop}", shopDomain);
                 return 0;
+            }
+        }
+
+        private async Task<bool> UpdateProfileZoneAsync(
+            string graphqlUrl,
+            string accessToken,
+            string profileId,
+            string locationGroupId,
+            string zoneId,
+            string carrierGid)
+        {
+            var mutation = new
+            {
+                query = @"
+                    mutation deliveryProfileUpdate($id: ID!, $profile: DeliveryProfileInput!) {
+                        deliveryProfileUpdate(id: $id, profile: $profile) {
+                            profile {
+                                id
+                            }
+                            userErrors {
+                                field
+                                message
+                            }
+                        }
+                    }",
+                variables = new
+                {
+                    id = profileId,
+                    profile = new
+                    {
+                        locationGroupsToUpdate = new[]
+                        {
+                            new
+                            {
+                                id = locationGroupId,
+                                zonesToUpdate = new[]
+                                {
+                                    new
+                                    {
+                                        id = zoneId,
+                                        methodDefinitionsToCreate = new[]
+                                        {
+                                            new
+                                            {
+                                                name = "Skypoint Shipping",
+                                                description = "Live rates by Skypoint",
+                                                active = true,
+                                                participant = new
+                                                {
+                                                    carrierServiceId = carrierGid
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return await ExecuteProfileMutationAsync(graphqlUrl, accessToken, mutation, "UpdateProfileZone");
+        }
+
+        private async Task<bool> CreateProfileZoneAsync(
+            string graphqlUrl,
+            string accessToken,
+            string profileId,
+            string locationGroupId,
+            string carrierGid)
+        {
+            var mutation = new
+            {
+                query = @"
+                    mutation deliveryProfileUpdate($id: ID!, $profile: DeliveryProfileInput!) {
+                        deliveryProfileUpdate(id: $id, profile: $profile) {
+                            profile {
+                                id
+                            }
+                            userErrors {
+                                field
+                                message
+                            }
+                        }
+                    }",
+                variables = new
+                {
+                    id = profileId,
+                    profile = new
+                    {
+                        locationGroupsToUpdate = new[]
+                        {
+                            new
+                            {
+                                id = locationGroupId,
+                                zonesToCreate = new[]
+                                {
+                                    new
+                                    {
+                                        name = "South Africa",
+                                        countries = new[]
+                                        {
+                                            new
+                                            {
+                                                code = "ZA"
+                                            }
+                                        },
+                                        methodDefinitionsToCreate = new[]
+                                        {
+                                            new
+                                            {
+                                                name = "Skypoint Shipping",
+                                                description = "Live rates by Skypoint",
+                                                active = true,
+                                                participant = new
+                                                {
+                                                    carrierServiceId = carrierGid
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return await ExecuteProfileMutationAsync(graphqlUrl, accessToken, mutation, "CreateProfileZone");
+        }
+
+        private async Task<bool> ExecuteProfileMutationAsync(
+            string graphqlUrl,
+            string accessToken,
+            object mutationPayload,
+            string operationName)
+        {
+            try
+            {
+                var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                req.Content = new StringContent(JsonSerializer.Serialize(mutationPayload), Encoding.UTF8, "application/json");
+
+                var resp = await _httpClient.SendAsync(req);
+                var body = await resp.Content.ReadAsStringAsync();
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to execute {OperationName}: HTTP {Status}. Body: {Body}", operationName, resp.StatusCode, body);
+                    return false;
+                }
+
+                var json = JsonNode.Parse(body);
+                if (json?["errors"] != null)
+                {
+                    _logger.LogError("GraphQL errors in {OperationName}: {Errors}", operationName, json["errors"]?.ToString());
+                    return false;
+                }
+
+                var updateResult = json?["data"]?["deliveryProfileUpdate"];
+                if (updateResult == null)
+                {
+                    _logger.LogError("{OperationName} response is null. Body: {Body}", operationName, body);
+                    return false;
+                }
+
+                var userErrors = updateResult["userErrors"]?.AsArray();
+                if (userErrors != null && userErrors.Count > 0)
+                {
+                    var errorsStr = string.Join(", ", userErrors.Select(e => $"{e?["field"]}: {e?["message"]}"));
+                    _logger.LogError("{OperationName} userErrors: {Errors}", operationName, errorsStr);
+                    return false;
+                }
+
+                _logger.LogInformation("Successfully executed {OperationName}", operationName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception in {OperationName}", operationName);
+                return false;
             }
         }
 
@@ -486,11 +768,444 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     callback_url = newCallbackUrl
                 }
             };
-
             var response = await PutJsonAsync(url, accessToken, bodyObj);
             var content = await response.Content.ReadAsStringAsync();
             _logger.LogInformation("Update carrier callback {Status}: {Content}", response.StatusCode, content);
             return response.IsSuccessStatusCode;
+        }
+
+        public async Task<(bool success, string message)> RegisterMetafieldDefinitionsAsync(string shopDomain, string accessToken)
+        {
+            try
+            {
+                // Register Metaobject first
+                var metaobjectRegistered = await RegisterMetaobjectDefinitionsAsync(shopDomain, accessToken);
+                if (!metaobjectRegistered)
+                {
+                    _logger.LogWarning("Metaobject definition registration failed for {Shop}.", shopDomain);
+                }
+
+                var metaobjectDefinitionId = await GetMetaobjectDefinitionIdAsync(shopDomain, accessToken);
+
+                var graphqlUrl = $"https://{shopDomain}/admin/api/2024-01/graphql.json";
+                var definitions = new[]
+                {
+                    new { key = "username", name = "SkyNet Online API Username", type = "single_line_text_field", desc = "SkyNet Online API Username for authentication.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "password", name = "SkyNet Online API Password", type = "single_line_text_field", desc = "SkyNet Online API Password for authentication.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "isuat", name = "SkyNet Online Use UAT Sandbox", type = "boolean", desc = "Enable UAT sandbox testing.", ownerType = "SHOP", validations = (object)null },
+                    
+                    new { key = "shipper_company", name = "SkyNet Online Shipper Company", type = "single_line_text_field", desc = "Pick Up Company Name.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_first_name", name = "SkyNet Online Shipper First Name", type = "single_line_text_field", desc = "Pick Up Contact First Name.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_last_name", name = "SkyNet Online Shipper Last Name", type = "single_line_text_field", desc = "Pick Up Contact Last Name.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_email", name = "SkyNet Online Shipper Email", type = "single_line_text_field", desc = "Pick Up Contact Email Address.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_phone", name = "SkyNet Online Shipper Phone", type = "single_line_text_field", desc = "Pick Up Contact Phone Number.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_address1", name = "SkyNet Online Shipper Address Line 1", type = "single_line_text_field", desc = "Pick Up Address Line 1.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_suburb", name = "SkyNet Online Shipper Suburb", type = "single_line_text_field", desc = "Pick Up Suburb.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_postcode", name = "SkyNet Online Shipper Postal Code", type = "single_line_text_field", desc = "Pick Up Postal Code.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_city", name = "SkyNet Online Shipper City", type = "single_line_text_field", desc = "Pick Up City.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "shipper_province", name = "SkyNet Online Shipper Province", type = "single_line_text_field", desc = "Pick Up Province.", ownerType = "SHOP", validations = (object)null },
+                    
+                    new { key = "fallback_cost", name = "SkyNet Online Fallback Cost", type = "number_decimal", desc = "Shipping cost when services are unavailable (ZAR).", ownerType = "SHOP", validations = (object)null },
+                    new { key = "freeship_threshold", name = "SkyNet Online Free Shipping Threshold", type = "number_decimal", desc = "Free shipping threshold cart value (ZAR).", ownerType = "SHOP", validations = (object)null },
+                    new { key = "default_mass", name = "SkyNet Online Default Mass (kg)", type = "number_decimal", desc = "Default parcel weight when product has no weight.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "default_length", name = "SkyNet Online Default Length (cm)", type = "number_decimal", desc = "Default parcel length (cm).", ownerType = "SHOP", validations = (object)null },
+                    new { key = "default_breadth", name = "SkyNet Online Default Breadth (cm)", type = "number_decimal", desc = "Default parcel breadth (cm).", ownerType = "SHOP", validations = (object)null },
+                    new { key = "default_height", name = "SkyNet Online Default Height (cm)", type = "number_decimal", desc = "Default parcel height (cm).", ownerType = "SHOP", validations = (object)null },
+                    
+                    new { key = "enable_road", name = "SkyNet Online Enable Road Service", type = "boolean", desc = "Enable Road shipping service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "enable_air", name = "SkyNet Online Enable Air Service", type = "boolean", desc = "Enable Air shipping service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "enable_counter", name = "SkyNet Online Enable Counter Service", type = "boolean", desc = "Enable PUDO Counter shipping service.", ownerType = "SHOP", validations = (object)null },
+                    
+                    new { key = "rename_road", name = "SkyNet Online Rename Road Service", type = "single_line_text_field", desc = "Display name for Road Service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "rename_air", name = "SkyNet Online Rename Air Service", type = "single_line_text_field", desc = "Display name for Air Service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "rename_counter", name = "SkyNet Online Rename Counter Service", type = "single_line_text_field", desc = "Display name for Counter Service.", ownerType = "SHOP", validations = (object)null },
+                    
+                    new { key = "sort_road", name = "SkyNet Online Sort Order Road", type = "number_integer", desc = "Display sort order for Road Service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "sort_air", name = "SkyNet Online Sort Order Air", type = "number_integer", desc = "Display sort order for Air Service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "sort_counter", name = "SkyNet Online Sort Order Counter", type = "number_integer", desc = "Display sort order for Counter Service.", ownerType = "SHOP", validations = (object)null },
+                    
+                    new { key = "markup_type", name = "SkyNet Online Markup Type (percentage/flat)", type = "single_line_text_field", desc = "Markup calculation type: 'percent' or 'flat'.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "markup_road", name = "SkyNet Online Markup Road Service", type = "number_decimal", desc = "Markup value for Road Service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "markup_air", name = "SkyNet Online Markup Air Service", type = "number_decimal", desc = "Markup value for Air Service.", ownerType = "SHOP", validations = (object)null },
+                    new { key = "markup_counter", name = "SkyNet Online Markup Counter Service", type = "number_decimal", desc = "Markup value for Counter Service.", ownerType = "SHOP", validations = (object)null },
+                    
+                    // Product Metafields
+                    new { key = "length", name = "SkyNet Online Length (cm)", type = "number_decimal", desc = "Product Length in cm.", ownerType = "PRODUCT", validations = (object)null },
+                    new { key = "breadth", name = "SkyNet Online Breadth (cm)", type = "number_decimal", desc = "Product Breadth in cm.", ownerType = "PRODUCT", validations = (object)null },
+                    new { key = "height", name = "SkyNet Online Height (cm)", type = "number_decimal", desc = "Product Height in cm.", ownerType = "PRODUCT", validations = (object)null },
+                    new { key = "shipping_profile", name = "SkyNet Online Shipping Profile", type = "metaobject_reference", desc = "Assign this product to a SkyNet Online Shipping Profile.", ownerType = "PRODUCT", 
+                          validations = (object)(string.IsNullOrEmpty(metaobjectDefinitionId) ? null : new[] { new { name = "metaobject_definition_id", value = metaobjectDefinitionId } }) }
+                };
+
+                // 1. Fetch existing definitions for both SHOP and PRODUCT to find their IDs for updating
+                var listQuery = new
+                {
+                    query = @"
+                        query GetMetafieldDefinitions {
+                            shopDefs: metafieldDefinitions(first: 50, ownerType: SHOP, namespace: ""skypoint_shipping"") {
+                                edges {
+                                    node {
+                                        id
+                                        key
+                                        name
+                                    }
+                                }
+                            }
+                            productDefs: metafieldDefinitions(first: 50, ownerType: PRODUCT, namespace: ""skypoint_shipping"") {
+                                edges {
+                                    node {
+                                        id
+                                        key
+                                        name
+                                    }
+                                }
+                            }
+                        }"
+                };
+
+                var listReq = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                listReq.Headers.Add("X-Shopify-Access-Token", accessToken);
+                listReq.Content = new StringContent(JsonSerializer.Serialize(listQuery), Encoding.UTF8, "application/json");
+                var listResp = await _httpClient.SendAsync(listReq);
+                var listBody = await listResp.Content.ReadAsStringAsync();
+                
+                var existingDefs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (listResp.IsSuccessStatusCode)
+                {
+                    var listJson = JsonNode.Parse(listBody);
+                    var shopEdges = listJson?["data"]?["shopDefs"]?["edges"]?.AsArray();
+                    if (shopEdges != null)
+                    {
+                        foreach (var edge in shopEdges)
+                        {
+                            var id = edge?["node"]?["id"]?.ToString();
+                            var key = edge?["node"]?["key"]?.ToString();
+                            var name = edge?["node"]?["name"]?.ToString();
+                            if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(key))
+                            {
+                                existingDefs[$"SHOP:{key}"] = id;
+                                _logger.LogInformation("Existing SHOP metafield definition - Key: {Key}, Name: {Name}", key, name);
+                            }
+                        }
+                    }
+
+                    var productEdges = listJson?["data"]?["productDefs"]?["edges"]?.AsArray();
+                    if (productEdges != null)
+                    {
+                        foreach (var edge in productEdges)
+                        {
+                            var id = edge?["node"]?["id"]?.ToString();
+                            var key = edge?["node"]?["key"]?.ToString();
+                            var name = edge?["node"]?["name"]?.ToString();
+                            if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(key))
+                            {
+                                existingDefs[$"PRODUCT:{key}"] = id;
+                                _logger.LogInformation("Existing PRODUCT metafield definition - Key: {Key}, Name: {Name}", key, name);
+                            }
+                        }
+                    }
+                }
+
+                var createdCount = 0;
+                var updatedCount = 0;
+                var errorCount = 0;
+
+                foreach (var def in definitions)
+                {
+                    var lookupKey = $"{def.ownerType}:{def.key}";
+                    if (existingDefs.TryGetValue(lookupKey, out var definitionId))
+                    {
+                        // Update existing definition
+                        var mutation = new
+                        {
+                            query = @"
+                                mutation UpdateMetafieldDefinition($definition: MetafieldDefinitionUpdateInput!) {
+                                    metafieldDefinitionUpdate(definition: $definition) {
+                                        updatedDefinition {
+                                            id
+                                            name
+                                        }
+                                        userErrors {
+                                            field
+                                            message
+                                        }
+                                    }
+                                }",
+                            variables = new
+                            {
+                                definition = new
+                                {
+                                    id = definitionId,
+                                    name = def.name,
+                                    description = def.desc
+                                }
+                            }
+                        };
+
+                        var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                        req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                        req.Content = new StringContent(JsonSerializer.Serialize(mutation), Encoding.UTF8, "application/json");
+
+                        var resp = await _httpClient.SendAsync(req);
+                        var body = await resp.Content.ReadAsStringAsync();
+
+                        if (!resp.IsSuccessStatusCode)
+                        {
+                            _logger.LogWarning("Failed to update metafield {Key} ({Owner}) for {Shop}: HTTP {Status}", def.key, def.ownerType, shopDomain, resp.StatusCode);
+                            errorCount++;
+                            continue;
+                        }
+
+                        var json = JsonNode.Parse(body);
+                        var userErrors = json?["data"]?["metafieldDefinitionUpdate"]?["userErrors"]?.AsArray();
+                        
+                        if (userErrors == null || userErrors.Count == 0)
+                        {
+                            _logger.LogInformation("Successfully updated metafield definition: {Key} ({Owner})", def.key, def.ownerType);
+                            updatedCount++;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Errors updating metafield definition {Key} ({Owner}): {Errors}", 
+                                def.key, def.ownerType, string.Join(", ", userErrors.Select(e => $"{e?["field"]}: {e?["message"]}")));
+                            errorCount++;
+                        }
+                    }
+                    else
+                    {
+                        // Create new definition
+                        var mutation = new
+                        {
+                            query = @"
+                                mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+                                    metafieldDefinitionCreate(definition: $definition) {
+                                        createdDefinition {
+                                            id
+                                            key
+                                        }
+                                        userErrors {
+                                            field
+                                            message
+                                        }
+                                    }
+                                }",
+                            variables = new
+                            {
+                                definition = new
+                                {
+                                    name = def.name,
+                                    @namespace = "skypoint_shipping",
+                                    key = def.key,
+                                    description = def.desc,
+                                    type = def.type,
+                                    ownerType = def.ownerType,
+                                    validations = def.validations
+                                }
+                            }
+                        };
+
+                        var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                        req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                        req.Content = new StringContent(JsonSerializer.Serialize(mutation), Encoding.UTF8, "application/json");
+
+                        var resp = await _httpClient.SendAsync(req);
+                        var body = await resp.Content.ReadAsStringAsync();
+
+                        if (!resp.IsSuccessStatusCode)
+                        {
+                            _logger.LogWarning("Failed to create metafield {Key} ({Owner}) for {Shop}: HTTP {Status}", def.key, def.ownerType, shopDomain, resp.StatusCode);
+                            errorCount++;
+                            continue;
+                        }
+
+                        var json = JsonNode.Parse(body);
+                        var userErrors = json?["data"]?["metafieldDefinitionCreate"]?["userErrors"]?.AsArray();
+                        
+                        if (userErrors == null || userErrors.Count == 0)
+                        {
+                            _logger.LogInformation("Successfully registered metafield definition: {Key} ({Owner})", def.key, def.ownerType);
+                            createdCount++;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Errors registering metafield definition {Key} ({Owner}): {Errors}", 
+                                def.key, def.ownerType, string.Join(", ", userErrors.Select(e => $"{e?["field"]}: {e?["message"]}")));
+                            errorCount++;
+                        }
+                    }
+                }
+
+                return (true, $"Metafield registration complete. Created: {createdCount}, Updated: {updatedCount}, Errors: {errorCount}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error registering metafield definitions for {Shop}", shopDomain);
+                return (false, $"Exception: {ex.Message}");
+            }
+        }
+
+        private async Task<string?> GetShopGidAsync(string shopDomain, string accessToken)
+        {
+            try
+            {
+                var graphqlUrl = $"https://{shopDomain}/admin/api/2024-01/graphql.json";
+                var query = new
+                {
+                    query = @"
+                        query {
+                            shop {
+                                id
+                            }
+                        }"
+                };
+
+                var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                req.Content = new StringContent(JsonSerializer.Serialize(query), Encoding.UTF8, "application/json");
+
+                var resp = await _httpClient.SendAsync(req);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var body = await resp.Content.ReadAsStringAsync();
+                    var json = JsonNode.Parse(body);
+                    return json?["data"]?["shop"]?["id"]?.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting shop ID for {Shop}", shopDomain);
+            }
+            return null;
+        }
+
+        public async Task<bool> PopulateDefaultSettingsAsync(string shopDomain, string accessToken)
+        {
+            try
+            {
+                var shopGid = await GetShopGidAsync(shopDomain, accessToken);
+                if (string.IsNullOrEmpty(shopGid))
+                {
+                    _logger.LogWarning("Cannot populate default settings: shop ID is null.");
+                    return false;
+                }
+
+                string GetConfigValue(string key, string defaultValue)
+                {
+                    var val = _configuration[key];
+                    return !string.IsNullOrWhiteSpace(val) ? val : defaultValue;
+                }
+
+                var graphqlUrl = $"https://{shopDomain}/admin/api/2024-01/graphql.json";
+                
+                var metafieldsList = new List<object>
+                {
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "username", type = "single_line_text_field", value = GetConfigValue("Credentials:Username", "") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "password", type = "single_line_text_field", value = GetConfigValue("Credentials:Password", "") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "isuat", type = "boolean", value = GetConfigValue("Credentials:UseUat", "true").ToLowerInvariant() },
+
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_company", type = "single_line_text_field", value = GetConfigValue("Shipper:CompanyName", "My Online Store Pty Ltd") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_first_name", type = "single_line_text_field", value = GetConfigValue("Shipper:FirstName", "Webnox") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_last_name", type = "single_line_text_field", value = GetConfigValue("Shipper:LastName", "Tech") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_email", type = "single_line_text_field", value = GetConfigValue("Shipper:Email", "webnoxbackend@gmail.com") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_phone", type = "single_line_text_field", value = GetConfigValue("Shipper:Phone", "9790272035") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_address1", type = "single_line_text_field", value = GetConfigValue("Shipper:Address1", "140 North Reef Road") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_suburb", type = "single_line_text_field", value = GetConfigValue("Shipper:Suburb", "GERMISTON") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_postcode", type = "single_line_text_field", value = GetConfigValue("Shipper:PostalCode", "1401") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_city", type = "single_line_text_field", value = GetConfigValue("Shipper:City", "Germiston") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "shipper_province", type = "single_line_text_field", value = GetConfigValue("Shipper:Province", "Gauteng") },
+
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "fallback_cost", type = "number_decimal", value = GetConfigValue("ShippingRules:FallbackCost", "150.00") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "freeship_threshold", type = "number_decimal", value = GetConfigValue("ShippingRules:FreeShipThreshold", "0.00") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "default_mass", type = "number_decimal", value = GetConfigValue("SkypointMappings:DefaultParcelMass", "15.0") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "default_length", type = "number_decimal", value = GetConfigValue("SkypointMappings:DefaultParcelLength", "15.0") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "default_breadth", type = "number_decimal", value = GetConfigValue("SkypointMappings:DefaultParcelBreadth", "15.0") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "default_height", type = "number_decimal", value = GetConfigValue("SkypointMappings:DefaultParcelHeight", "10.0") },
+
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "enable_road", type = "boolean", value = GetConfigValue("ShippingRules:EnableRoad", "true").ToLowerInvariant() },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "enable_air", type = "boolean", value = GetConfigValue("ShippingRules:EnableAir", "true").ToLowerInvariant() },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "enable_counter", type = "boolean", value = GetConfigValue("ShippingRules:EnableCounter", "true").ToLowerInvariant() },
+
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "rename_road", type = "single_line_text_field", value = GetConfigValue("ShippingRules:RenameRoad", "EXPRESS ROAD") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "rename_air", type = "single_line_text_field", value = GetConfigValue("ShippingRules:RenameAir", "EXPRESS AIR") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "rename_counter", type = "single_line_text_field", value = GetConfigValue("ShippingRules:RenameCounter", "DOOR TO COUNTER") },
+
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "sort_road", type = "number_integer", value = GetConfigValue("ShippingRules:SortRoad", "1") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "sort_air", type = "number_integer", value = GetConfigValue("ShippingRules:SortAir", "2") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "sort_counter", type = "number_integer", value = GetConfigValue("ShippingRules:SortCounter", "3") },
+
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "markup_type", type = "single_line_text_field", value = GetConfigValue("ShippingRules:MarkupType", "percent") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "markup_road", type = "number_decimal", value = GetConfigValue("ShippingRules:MarkupRoad", "0.00") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "markup_air", type = "number_decimal", value = GetConfigValue("ShippingRules:MarkupAir", "0.00") },
+                    new { ownerId = shopGid, @namespace = "skypoint_shipping", key = "markup_counter", type = "number_decimal", value = GetConfigValue("ShippingRules:MarkupCounter", "0.00") }
+                };
+
+                // Split the list of 29 metafields into chunks of maximum 15 items
+                // because Shopify has a maximum limit of 25 metafields per metafieldsSet call.
+                var chunkSize = 15;
+                var success = true;
+
+                for (int i = 0; i < metafieldsList.Count; i += chunkSize)
+                {
+                    var chunk = metafieldsList.Skip(i).Take(chunkSize).ToList();
+                    
+                    var mutation = new
+                    {
+                        query = @"
+                            mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+                                metafieldsSet(metafields: $metafields) {
+                                    metafields {
+                                        key
+                                        value
+                                    }
+                                    userErrors {
+                                        field
+                                        message
+                                        code
+                                    }
+                                }
+                            }",
+                        variables = new
+                        {
+                            metafields = chunk
+                        }
+                    };
+
+                    var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                    req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                    req.Content = new StringContent(JsonSerializer.Serialize(mutation), Encoding.UTF8, "application/json");
+
+                    var resp = await _httpClient.SendAsync(req);
+                    var body = await resp.Content.ReadAsStringAsync();
+
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        var json = JsonNode.Parse(body);
+                        var errors = json?["data"]?["metafieldsSet"]?["userErrors"]?.AsArray();
+                        if (errors == null || errors.Count == 0)
+                        {
+                            _logger.LogInformation("Successfully populated default settings chunk starting at {Index} on Shopify shop {Shop}", i, shopDomain);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Errors populating default settings chunk starting at {Index}: {Errors}", 
+                                i, string.Join(", ", errors.Select(e => $"{e?["field"]}: {e?["message"]}")));
+                            success = false;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("HTTP error populating default settings chunk starting at {Index}: {Status}", i, resp.StatusCode);
+                        success = false;
+                    }
+                }
+
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error populating default settings for {Shop}", shopDomain);
+            }
+            return false;
         }
 
         private async Task<HttpResponseMessage> PostJsonAsync(string url, string accessToken, object body)
@@ -810,6 +1525,231 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 _logger.LogError(ex, "Failed to get/create Storefront API token for {Shop}", shopDomain);
                 return null;
             }
+        }
+
+        private async Task<string?> GetMetaobjectDefinitionIdAsync(string shopDomain, string accessToken)
+        {
+            try
+            {
+                var graphqlUrl = $"https://{shopDomain}/admin/api/2024-01/graphql.json";
+                var query = new
+                {
+                    query = @"
+                        query {
+                            metaobjectDefinitionByType(type: ""skypoint_shipping_profile"") {
+                                id
+                            }
+                        }"
+                };
+
+                var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                req.Content = new StringContent(JsonSerializer.Serialize(query), Encoding.UTF8, "application/json");
+
+                var resp = await _httpClient.SendAsync(req);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var body = await resp.Content.ReadAsStringAsync();
+                    var json = JsonNode.Parse(body);
+                    return json?["data"]?["metaobjectDefinitionByType"]?["id"]?.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking metaobject definition for {Shop}", shopDomain);
+            }
+            return null;
+        }
+
+        private async Task<bool> RegisterMetaobjectDefinitionsAsync(string shopDomain, string accessToken)
+        {
+            try
+            {
+                var existingId = await GetMetaobjectDefinitionIdAsync(shopDomain, accessToken);
+                if (!string.IsNullOrEmpty(existingId))
+                {
+                    _logger.LogInformation("Metaobject definition skypoint_shipping_profile already exists (ID: {Id}).", existingId);
+                    return true;
+                }
+
+                _logger.LogInformation("Creating metaobject definition skypoint_shipping_profile for {Shop}...", shopDomain);
+                var graphqlUrl = $"https://{shopDomain}/admin/api/2024-01/graphql.json";
+                var mutation = new
+                {
+                    query = @"
+                        mutation CreateMetaobjectDefinition($definition: MetaobjectDefinitionCreateInput!) {
+                            metaobjectDefinitionCreate(definition: $definition) {
+                                metaobjectDefinition {
+                                    id
+                                    type
+                                }
+                                userErrors {
+                                    field
+                                    message
+                                }
+                            }
+                        }",
+                    variables = new
+                    {
+                        definition = new
+                        {
+                            name = "SkyNet Online Shipping Profile",
+                            type = "skypoint_shipping_profile",
+                            access = new
+                            {
+                                storefront = "PUBLIC_READ"
+                            },
+                            fieldDefinitions = new[]
+                            {
+                                new { name = "Profile Name", key = "name", type = "single_line_text_field", required = true },
+                                new { name = "Mass (kg)", key = "mass", type = "number_decimal", required = false },
+                                new { name = "Length (cm)", key = "length", type = "number_decimal", required = false },
+                                new { name = "Breadth (cm)", key = "breadth", type = "number_decimal", required = false },
+                                new { name = "Height (cm)", key = "height", type = "number_decimal", required = false }
+                            }
+                        }
+                    }
+                };
+
+                var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                req.Content = new StringContent(JsonSerializer.Serialize(mutation), Encoding.UTF8, "application/json");
+
+                var resp = await _httpClient.SendAsync(req);
+                var body = await resp.Content.ReadAsStringAsync();
+                _logger.LogInformation("Metaobject Create Body: {Body}", body);
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Failed to create metaobject definition for {Shop}: HTTP {Status}", shopDomain, resp.StatusCode);
+                    return false;
+                }
+
+                var json = JsonNode.Parse(body);
+                var userErrors = json?["data"]?["metaobjectDefinitionCreate"]?["userErrors"]?.AsArray();
+                if (userErrors == null || userErrors.Count == 0)
+                {
+                    var createdId = json?["data"]?["metaobjectDefinitionCreate"]?["metaobjectDefinition"]?["id"]?.ToString();
+                    _logger.LogInformation("Successfully created metaobject definition skypoint_shipping_profile (ID: {Id})", createdId);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning("Errors creating metaobject definition: {Errors}", 
+                        string.Join(", ", userErrors.Select(e => $"{e?["field"]}: {e?["message"]}")));
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating metaobject definition for {Shop}", shopDomain);
+                return false;
+            }
+        }
+
+        public async Task<ProductDimension?> GetProductDimensionsAsync(string shopDomain, string accessToken, string productId)
+        {
+            if (string.IsNullOrEmpty(productId)) return null;
+
+            var cacheKey = $"prod_dim:{shopDomain}:{productId}";
+            if (_memoryCache.TryGetValue<ProductDimension>(cacheKey, out var cachedDim))
+            {
+                return cachedDim;
+            }
+
+            try
+            {
+                var productGid = productId.StartsWith("gid://shopify/") ? productId : $"gid://shopify/Product/{productId}";
+
+                var graphqlUrl = $"https://{shopDomain}/admin/api/2024-01/graphql.json";
+                var query = new
+                {
+                    query = @"
+                        query GetProductDimensions($id: ID!) {
+                            product(id: $id) {
+                                length: metafield(namespace: ""skypoint_shipping"", key: ""length"") { value }
+                                breadth: metafield(namespace: ""skypoint_shipping"", key: ""breadth"") { value }
+                                height: metafield(namespace: ""skypoint_shipping"", key: ""height"") { value }
+                                profile_ref: metafield(namespace: ""skypoint_shipping"", key: ""shipping_profile"") {
+                                    reference {
+                                        ... on Metaobject {
+                                            fields {
+                                                key
+                                                value
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }",
+                    variables = new { id = productGid }
+                };
+
+                var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                req.Content = new StringContent(JsonSerializer.Serialize(query), Encoding.UTF8, "application/json");
+
+                var resp = await _httpClient.SendAsync(req);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Failed to query product dimensions for {ProductId} on {Shop}: HTTP {Status}", productId, shopDomain, resp.StatusCode);
+                    return null;
+                }
+
+                var body = await resp.Content.ReadAsStringAsync();
+                var json = JsonNode.Parse(body);
+                var productNode = json?["data"]?["product"];
+                if (productNode == null) return null;
+
+                var resolvedDim = new ProductDimension();
+
+                // 1. Read product-level metafield overrides
+                var pLength = productNode["length"]?["value"]?.ToString();
+                var pBreadth = productNode["breadth"]?["value"]?.ToString();
+                var pHeight = productNode["height"]?["value"]?.ToString();
+
+                if (double.TryParse(pLength, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var len)) resolvedDim.Length = len;
+                if (double.TryParse(pBreadth, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var brd)) resolvedDim.Breadth = brd;
+                if (double.TryParse(pHeight, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var hgt)) resolvedDim.Height = hgt;
+
+                // 2. Read shipping profile metaobject reference if some dimensions are missing
+                var profileFields = productNode["profile_ref"]?["reference"]?["fields"]?.AsArray();
+                if (profileFields != null)
+                {
+                    foreach (var field in profileFields)
+                    {
+                        var key = field?["key"]?.ToString();
+                        var val = field?["value"]?.ToString();
+                        if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(val)) continue;
+
+                        if (key.Equals("mass", StringComparison.OrdinalIgnoreCase) && double.TryParse(val, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var m))
+                        {
+                            resolvedDim.Mass = m;
+                        }
+                        else if (key.Equals("length", StringComparison.OrdinalIgnoreCase) && resolvedDim.Length == null && double.TryParse(val, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var l))
+                        {
+                            resolvedDim.Length = l;
+                        }
+                        else if (key.Equals("breadth", StringComparison.OrdinalIgnoreCase) && resolvedDim.Breadth == null && double.TryParse(val, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var b))
+                        {
+                            resolvedDim.Breadth = b;
+                        }
+                        else if (key.Equals("height", StringComparison.OrdinalIgnoreCase) && resolvedDim.Height == null && double.TryParse(val, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var h))
+                        {
+                            resolvedDim.Height = h;
+                        }
+                    }
+                }
+
+                _memoryCache.Set(cacheKey, resolvedDim, TimeSpan.FromHours(1));
+                return resolvedDim;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting product dimensions for {ProductId} from {Shop}", productId, shopDomain);
+            }
+
+            return null;
         }
     }
 }

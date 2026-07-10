@@ -62,7 +62,7 @@
             <h2 class="form-welcome-title">Welcome back</h2>
             <p class="form-welcome-subtitle">Sign in to your SkyNet Online customer account to manage shipments and track parcels.</p>
 
-            <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
+            <EditForm Model="@loginModel" OnValidSubmit="HandleLogin" FormName="loginForm">
                 <DataAnnotationsValidator />
 
                 <div class="form-group-light">
@@ -84,7 +84,7 @@
                     <ValidationMessage For="@(() => loginModel.Password)" style="color: #ef4444; font-size: 0.8rem; margin-top: 5px;" />
                 </div>
 
-                <a href="#" class="form-link-highlight" style="font-size: 0.85rem; display: block; text-align: right; margin-top: -0.5rem; margin-bottom: 2rem;">Forgot your password?</a>
+                @*<a href="#" class="form-link-highlight" style="font-size: 0.85rem; display: block; text-align: right; margin-top: -0.5rem; margin-bottom: 2rem;">Forgot your password?</a>*@
 
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
@@ -97,14 +97,6 @@
 
                 <button type="submit" class="btn-skynet-red" disabled="@isSubmitting">
                     <i class="fas fa-sign-in-alt mr-2"></i> @(isSubmitting ? "Connecting to SkyNet Online..." : "Login")
-                </button>
-
-                <div style="text-align: center; margin: 1.5rem 0; color: #94a3b8; font-size: 0.85rem; font-weight: 700; position: relative;">
-                    OR
-                </div>
-
-                <button type="button" class="btn-skynet-green" @onclick="LoginWithAad">
-                    <i class="fab fa-microsoft mr-2"></i> Continue as a Guest
                 </button>
 
                 <a href="@GetRegisterLink()" class="btn-skynet-outline-red">
@@ -128,7 +120,6 @@
     private bool showPassword = false;
     private string? errorMessage;
     private string? successMessage;
-    private string? infoMessage;
 
     private string PasswordType => showPassword ? "text" : "password";
     private string PasswordToggleIcon => showPassword ? "fas fa-eye-slash" : "fas fa-eye";
@@ -172,7 +163,6 @@
     {
         errorMessage = "Microsoft AAD authentication is currently under development. Please log in using your SkyNet Client email and password below.";
         successMessage = null;
-        infoMessage = null;
     }
 
     private async Task HandleLogin()
@@ -180,7 +170,6 @@
         isSubmitting = true;
         errorMessage = null;
         successMessage = null;
-        infoMessage = null;
         StateHasChanged();
 
         var loginUrl = string.IsNullOrEmpty(Shop) 

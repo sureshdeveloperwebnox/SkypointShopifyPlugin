@@ -1,16 +1,3 @@
-// DIAGNOSTIC: runs synchronously the instant the script parses
-(function(){
-    var d=document.createElement('div');
-    d.id='sp-diag';
-    d.textContent='✅ SkyPoint JS loaded — waiting for DOM...';
-    d.style.cssText='position:fixed!important;top:0!important;left:0!important;right:0!important;'+
-        'background:#7c3aed!important;color:#fff!important;z-index:2147483647!important;'+
-        'text-align:center!important;padding:8px!important;font-size:14px!important;'+
-        'font-family:monospace!important;';
-    // Append to <html> since <body> may not exist yet
-    (document.body || document.documentElement).appendChild(d);
-})();
-
 (function () {
     'use strict';
 
@@ -92,8 +79,7 @@
     }
 
     function updateDiag(msg) {
-        var d = document.getElementById('sp-diag');
-        if (d) d.textContent = '🔵 SkyNet Online: ' + msg;
+        console.log('[SkyPoint Diag]', msg);
     }
 
     function getNativeXHR() {

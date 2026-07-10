@@ -32,7 +32,11 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         [JsonPropertyName("pickUpPerson")]
         public PickUpPersonResponse PickUpPerson { get; set; } = new();
         [JsonPropertyName("waybillResponse")]
-        public object? WaybillResponse { get; set; }
+        public WaybillResponseDto? WaybillResponse { get; set; }
+
+        /// <summary>Convenience accessor — returns the waybill barcode number or null.</summary>
+        [JsonIgnore]
+        public string? WaybillNumber => WaybillResponse?.WaybillNumber;
         [JsonPropertyName("fromSuburb")]
         public string FromSuburb { get; set; } = string.Empty;
         [JsonPropertyName("toSuburb")]
@@ -157,5 +161,11 @@ namespace SkypointShopifyPlugin.Core.DTOs.Skypoint
         public string? PredefinedParcel { get; set; }
         [JsonPropertyName("selected_parcel")]
         public string? SelectedParcel { get; set; }
+    }
+
+    public class WaybillResponseDto
+    {
+        [JsonPropertyName("waybillNumber")]
+        public string? WaybillNumber { get; set; }
     }
 }

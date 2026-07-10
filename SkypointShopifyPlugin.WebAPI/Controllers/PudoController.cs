@@ -105,7 +105,7 @@ namespace SkypointShopifyPlugin.WebAPI.Controllers
                 var response = await _skypointApiClient.GetSelectedPudoPointAsync(guid, token);
                 if (response == null)
                 {
-                    return NotFound(new { error = "PUDO point selection not found or expired" });
+                    return Ok(new { success = false, message = "PUDO point selection not found or not selected yet" });
                 }
 
                 return Ok(new { success = true, pudo_point = response });
