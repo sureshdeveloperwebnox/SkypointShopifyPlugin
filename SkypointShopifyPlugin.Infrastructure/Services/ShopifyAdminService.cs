@@ -377,13 +377,55 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                 var carrierGid = $"gid://shopify/DeliveryCarrierService/{carrierId}";
 
                 // Get all delivery profiles and their zones
-                var profilesQuery = new StringContent(
-                    "{\"query\":\"{ deliveryProfiles(first:10){ edges{ node{ id profileLocationGroups{ locationGroupZones(first:20){ edges{ node{ zone{ id name } } } } } } } } }\"}",
-                    Encoding.UTF8, "application/json");
+                var queryObj = new
+                {
+                    query = @"
+                        query {
+                          deliveryProfiles(first: 10) {
+                            edges {
+                              node {
+                                id
+                                name
+                                profileLocationGroups {
+                                  locationGroup {
+                                    id
+                                  }
+                                  locationGroupZones(first: 20) {
+                                    edges {
+                                      node {
+                                        zone {
+                                          id
+                                          name
+                                          countries {
+                                            code {
+                                              countryCode
+                                            }
+                                          }
+                                        }
+                                        methodDefinitions(first: 20) {
+                                          edges {
+                                            node {
+                                              name
+                                              active
+                                              rateProvider {
+                                                __typename
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }"
+                };
 
                 var profReq = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
                 profReq.Headers.Add("X-Shopify-Access-Token", accessToken);
-                profReq.Content = profilesQuery;
+                profReq.Content = new StringContent(JsonSerializer.Serialize(queryObj), Encoding.UTF8, "application/json");
                 var profResp = await _httpClient.SendAsync(profReq);
                 var profBody = await profResp.Content.ReadAsStringAsync();
                 _logger.LogInformation("Delivery profiles: {Body}", profBody);
@@ -399,37 +441,89 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
                     if (string.IsNullOrEmpty(profileId)) continue;
 
                     var locationGroups = profileEdge?["node"]?["profileLocationGroups"]?.AsArray();
-                    if (locationGroups == null) continue;
+                    if (locationGroups == null || locationGroups.Count == 0) continue;
+
+                    // Check if *any* location group in this profile has a zone covering ZA
+                    bool zaZoneExistsInProfile = false;
+                    string? zaZoneId = null;
+                    string? zaLocationGroupId = null;
+                    bool hasSkypointAlready = false;
 
                     foreach (var lg in locationGroups)
                     {
+                        var locationGroupId = lg?["locationGroup"]?["id"]?.ToString();
+                        if (string.IsNullOrEmpty(locationGroupId)) continue;
+
                         var zoneEdges = lg?["locationGroupZones"]?["edges"]?.AsArray();
                         if (zoneEdges == null) continue;
 
                         foreach (var zoneEdge in zoneEdges)
                         {
-                            var zoneId = zoneEdge?["node"]?["zone"]?["id"]?.ToString();
-                            if (string.IsNullOrEmpty(zoneId)) continue;
-
-                            var mutation = $"{{\"query\":\"mutation {{ deliveryProfileUpdate(id: \\\"{profileId}\\\", profile: {{ locationGroupsToUpdate: [{{ zonesToUpdate: [{{ id: \\\"{zoneId}\\\", methodDefinitionsToCreate: [{{ name: \\\"Skypoint Shipping\\\", description: \\\"Live rates by Skypoint\\\", active: true, rateProvider: {{ carrierService: {{ id: \\\"{carrierGid}\\\" }} }} }}] }}] }}] }}) {{ profile {{ id }} userErrors {{ field message }} }} }}\"}}";
-
-                            var mutReq = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
-                            mutReq.Headers.Add("X-Shopify-Access-Token", accessToken);
-                            mutReq.Content = new StringContent(mutation, Encoding.UTF8, "application/json");
-                            var mutResp = await _httpClient.SendAsync(mutReq);
-                            var mutBody = await mutResp.Content.ReadAsStringAsync();
-
-                            var mutJson = JsonNode.Parse(mutBody);
-                            var userErrors = mutJson?["data"]?["deliveryProfileUpdate"]?["userErrors"]?.AsArray();
-                            if (userErrors == null || userErrors.Count == 0)
+                            var zoneNode = zoneEdge?["node"]?["zone"];
+                            var countries = zoneNode?["countries"]?.AsArray();
+                            bool isZaZone = false;
+                            if (countries != null)
                             {
-                                _logger.LogInformation("Assigned Skypoint Shipping to zone {Zone}", zoneId);
-                                assigned++;
+                                foreach (var country in countries)
+                                {
+                                    var code = country?["code"]?["countryCode"]?.ToString();
+                                    if (code == "ZA")
+                                    {
+                                        isZaZone = true;
+                                        break;
+                                    }
+                                }
                             }
-                            else
+
+                            if (isZaZone)
                             {
-                                _logger.LogWarning("Could not assign to zone {Zone}: {Errors}", zoneId, mutBody);
+                                zaZoneExistsInProfile = true;
+                                zaZoneId = zoneNode?["id"]?.ToString();
+                                zaLocationGroupId = locationGroupId;
+
+                                // check if Skypoint is already there
+                                var methodEdges = zoneEdge?["node"]?["methodDefinitions"]?["edges"]?.AsArray();
+                                if (methodEdges != null)
+                                {
+                                    foreach (var methodEdge in methodEdges)
+                                    {
+                                        var methodName = methodEdge?["node"]?["name"]?.ToString();
+                                        if (methodName == "Skypoint Shipping")
+                                        {
+                                            hasSkypointAlready = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                break;
                             }
+                        }
+                        if (zaZoneExistsInProfile) break;
+                    }
+
+                    if (zaZoneExistsInProfile)
+                    {
+                        if (!hasSkypointAlready && !string.IsNullOrEmpty(zaZoneId) && !string.IsNullOrEmpty(zaLocationGroupId))
+                        {
+                            _logger.LogInformation("South Africa zone exists ({ZoneId}) in profile {ProfileId}, but Skypoint Shipping not assigned. Assigning...", zaZoneId, profileId);
+                            var updated = await UpdateProfileZoneAsync(graphqlUrl, accessToken, profileId, zaLocationGroupId, zaZoneId, carrierGid);
+                            if (updated) assigned++;
+                        }
+                        else
+                        {
+                            _logger.LogInformation("South Africa zone already has Skypoint Shipping assigned in profile {ProfileId}.", profileId);
+                        }
+                    }
+                    else
+                    {
+                        // Get the first location group ID of the profile
+                        var firstLg = locationGroups.First();
+                        var locationGroupId = firstLg?["locationGroup"]?["id"]?.ToString();
+                        if (!string.IsNullOrEmpty(locationGroupId))
+                        {
+                            _logger.LogInformation("South Africa zone does not exist in profile {ProfileId}. Creating new zone under location group {LocationGroupId}...", profileId, locationGroupId);
+                            var created = await CreateProfileZoneAsync(graphqlUrl, accessToken, profileId, locationGroupId, carrierGid);
+                            if (created) assigned++;
                         }
                     }
                 }
@@ -439,6 +533,187 @@ namespace SkypointShopifyPlugin.Infrastructure.Services
             {
                 _logger.LogWarning(ex, "Error assigning carrier to zones for {Shop}", shopDomain);
                 return 0;
+            }
+        }
+
+        private async Task<bool> UpdateProfileZoneAsync(
+            string graphqlUrl,
+            string accessToken,
+            string profileId,
+            string locationGroupId,
+            string zoneId,
+            string carrierGid)
+        {
+            var mutation = new
+            {
+                query = @"
+                    mutation deliveryProfileUpdate($id: ID!, $profile: DeliveryProfileInput!) {
+                        deliveryProfileUpdate(id: $id, profile: $profile) {
+                            profile {
+                                id
+                            }
+                            userErrors {
+                                field
+                                message
+                            }
+                        }
+                    }",
+                variables = new
+                {
+                    id = profileId,
+                    profile = new
+                    {
+                        locationGroupsToUpdate = new[]
+                        {
+                            new
+                            {
+                                id = locationGroupId,
+                                zonesToUpdate = new[]
+                                {
+                                    new
+                                    {
+                                        id = zoneId,
+                                        methodDefinitionsToCreate = new[]
+                                        {
+                                            new
+                                            {
+                                                name = "Skypoint Shipping",
+                                                description = "Live rates by Skypoint",
+                                                active = true,
+                                                participant = new
+                                                {
+                                                    carrierServiceId = carrierGid
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return await ExecuteProfileMutationAsync(graphqlUrl, accessToken, mutation, "UpdateProfileZone");
+        }
+
+        private async Task<bool> CreateProfileZoneAsync(
+            string graphqlUrl,
+            string accessToken,
+            string profileId,
+            string locationGroupId,
+            string carrierGid)
+        {
+            var mutation = new
+            {
+                query = @"
+                    mutation deliveryProfileUpdate($id: ID!, $profile: DeliveryProfileInput!) {
+                        deliveryProfileUpdate(id: $id, profile: $profile) {
+                            profile {
+                                id
+                            }
+                            userErrors {
+                                field
+                                message
+                            }
+                        }
+                    }",
+                variables = new
+                {
+                    id = profileId,
+                    profile = new
+                    {
+                        locationGroupsToUpdate = new[]
+                        {
+                            new
+                            {
+                                id = locationGroupId,
+                                zonesToCreate = new[]
+                                {
+                                    new
+                                    {
+                                        name = "South Africa",
+                                        countries = new[]
+                                        {
+                                            new
+                                            {
+                                                code = "ZA"
+                                            }
+                                        },
+                                        methodDefinitionsToCreate = new[]
+                                        {
+                                            new
+                                            {
+                                                name = "Skypoint Shipping",
+                                                description = "Live rates by Skypoint",
+                                                active = true,
+                                                participant = new
+                                                {
+                                                    carrierServiceId = carrierGid
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            return await ExecuteProfileMutationAsync(graphqlUrl, accessToken, mutation, "CreateProfileZone");
+        }
+
+        private async Task<bool> ExecuteProfileMutationAsync(
+            string graphqlUrl,
+            string accessToken,
+            object mutationPayload,
+            string operationName)
+        {
+            try
+            {
+                var req = new HttpRequestMessage(HttpMethod.Post, graphqlUrl);
+                req.Headers.Add("X-Shopify-Access-Token", accessToken);
+                req.Content = new StringContent(JsonSerializer.Serialize(mutationPayload), Encoding.UTF8, "application/json");
+
+                var resp = await _httpClient.SendAsync(req);
+                var body = await resp.Content.ReadAsStringAsync();
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogError("Failed to execute {OperationName}: HTTP {Status}. Body: {Body}", operationName, resp.StatusCode, body);
+                    return false;
+                }
+
+                var json = JsonNode.Parse(body);
+                if (json?["errors"] != null)
+                {
+                    _logger.LogError("GraphQL errors in {OperationName}: {Errors}", operationName, json["errors"]?.ToString());
+                    return false;
+                }
+
+                var updateResult = json?["data"]?["deliveryProfileUpdate"];
+                if (updateResult == null)
+                {
+                    _logger.LogError("{OperationName} response is null. Body: {Body}", operationName, body);
+                    return false;
+                }
+
+                var userErrors = updateResult["userErrors"]?.AsArray();
+                if (userErrors != null && userErrors.Count > 0)
+                {
+                    var errorsStr = string.Join(", ", userErrors.Select(e => $"{e?["field"]}: {e?["message"]}"));
+                    _logger.LogError("{OperationName} userErrors: {Errors}", operationName, errorsStr);
+                    return false;
+                }
+
+                _logger.LogInformation("Successfully executed {OperationName}", operationName);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Exception in {OperationName}", operationName);
+                return false;
             }
         }
 
